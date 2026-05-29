@@ -1,0 +1,68 @@
+{
+    "name": "mmoollllee/filament-model-link",
+    "description": "Renders related Eloquent models as colored pill chains with icon + link in Filament tables and forms. Ships contracts (HasPills, HasPillLabel, HasPillParent), a ModelLink form component, a ModelLinkColumn table column, and a presenter API for standalone use.",
+    "keywords": [
+        "laravel",
+        "filament",
+        "filamentphp",
+        "pills",
+        "badges",
+        "model-link",
+        "presenter",
+        "livewire",
+        "tailwindcss"
+    ],
+    "homepage": "https://github.com/mmoollllee/filament-model-link",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Moritz Graf",
+            "email": "info@moritz-graf.de",
+            "homepage": "https://moritz-graf.de"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "filament/filament": "^5.0",
+        "illuminate/contracts": "^11.28|^12.0|^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.0",
+        "orchestra/testbench": "^9.0|^10.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.0|^4.0",
+        "phpstan/extension-installer": "^1.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Mmoollllee\\FilamentModelLink\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Mmoollllee\\FilamentModelLink\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Mmoollllee\\FilamentModelLink\\FilamentModelLinkServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse",
+        "format": "pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
