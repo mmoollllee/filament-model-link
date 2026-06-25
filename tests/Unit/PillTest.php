@@ -64,6 +64,15 @@ it('renders a link when an explicit URL is given', function (): void {
         ->toContain('hover:underline');
 });
 
+it('keeps the tooltip on the fallback icon when no icon is supplied', function (): void {
+    $model = PillModel::fake(['name' => 'X']);
+
+    // icon() omitted → default model icon, but the tooltip must still attach.
+    $html = Pill::for($model)->iconTooltip('Admin')->toHtml();
+
+    expect($html)->toContain('title="Admin"');
+});
+
 it('keeps an explicit URL when combined with an icon override', function (): void {
     $model = PillModel::fake(['name' => 'L']);
 

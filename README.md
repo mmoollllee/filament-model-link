@@ -135,6 +135,50 @@ $panel->plugin(
 );
 ```
 
+### Multi-panel apps — controlling which panel a pill links to
+
+By default the package resolves a model's resource by first scanning the
+**current** panel, then every other registered panel in registration order.
+That's the right behavior for most apps. But if the **same model has a resource
+in more than one panel** (e.g. an `admin` panel and a tenant-scoped `app`
+panel), the default can pick the "wrong" panel for a pill rendered outside the
+model's own panel — producing a URL the current user isn't authorized for (a
+403 link).
+
+Use `resolveResourceUsing()` to pin the preference. The closure receives the
+related model and returns a `[resourceClass, panelId]` tuple (`panelId` may be
+`null` to mean "the current panel"):
+
+```php
+use Filament\Facades\Filament;
+
+FilamentModelLink::configure()
+    ->resolveResourceUsing(function (mixed $related): array {
+        try {
+            // Prefer a resource in the current panel …
+            $current = collect(Filament::getResources())->first(
+                fn ($candidate) => $related instanceof ($candidate::getModel())
+            );
+            if ($current) {
+                return [$current, null];
+            }
+
+            // … otherwise always fall back to the tenant-scoped 'app' panel,
+            // never another panel that happens to be registered first.
+            $app = collect(Filament::getPanel('app')->getResources())->first(
+                fn ($candidate) => $related instanceof ($candidate::getModel())
+            );
+
+            return [$app, $app ? 'app' : null];
+        } catch (\Throwable) {
+            return [null, null]; // Filament not booted (queue/console) → no link
+        }
+    });
+```
+
+The `panelId` you return is passed straight to `resolveResourceParametersUsing()`,
+so it's also where you decide whether to inject a tenant/team parameter.
+
 ## Use-case cookbook
 
 ### A) Single relation — auth-aware, searchable, with tooltip

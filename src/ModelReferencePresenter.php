@@ -247,12 +247,14 @@ class ModelReferencePresenter
     ): string {
         $classes = self::badgeClasses(self::pillColor($model));
 
-        if ($icon === null || $icon === '') {
-            $iconHtml = self::iconHtml($model);
-        } else {
-            $titleAttr = $iconTooltip !== '' ? ' title="'.e($iconTooltip).'"' : '';
-            $iconHtml = '<span class="inline-flex"'.$titleAttr.'>'.self::renderIcon($icon).'</span>';
-        }
+        // A caller-supplied icon replaces the model's default; when none is
+        // given, fall back to the default icon but keep the tooltip on it.
+        $iconInner = ($icon === null || $icon === '')
+            ? self::iconHtml($model)
+            : self::renderIcon($icon);
+
+        $titleAttr = $iconTooltip !== '' ? ' title="'.e($iconTooltip).'"' : '';
+        $iconHtml = '<span class="inline-flex"'.$titleAttr.'>'.$iconInner.'</span>';
 
         $inner = '<span class="inline-flex items-center gap-1.5">'
             .$iconHtml
