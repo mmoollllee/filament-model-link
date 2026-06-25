@@ -12,7 +12,7 @@ return [
     | Guards against accidental cycles in parent relationships.
     |
     */
-    'pill_chain_max_depth' => 5,
+    'pill_chain_max_depth' => 4,
 
     /*
     |--------------------------------------------------------------------------
