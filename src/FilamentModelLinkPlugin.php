@@ -12,23 +12,43 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Optional Filament plugin wrapper around the package configuration.
  *
- * Use this when you prefer the panel-scoped `Filament::registerPlugin(...)`
- * pattern over wiring everything in `AppServiceProvider::boot()`. Note that
- * the resolvers themselves are still global (static on `ModelReferencePresenter`)
- * because pill rendering happens outside any panel context (e.g. inside a
- * resource's `globalSearchResultDetails()`, queue notifications, …).
+ * Use this when you prefer the `$panel->plugin(...)` pattern over wiring
+ * everything in `AppServiceProvider::boot()`.
  *
- *     // In a Filament PanelProvider:
- *     $panel->plugin(
- *         FilamentModelLinkPlugin::make()
- *             ->resolveIconUsing(fn (string $class) => …)
- *             ->registerCustomUrlResolver(fn (...) => …),
- *     );
+ * **The resolvers are process-global** (static on `ModelReferencePresenter`)
+ * because pill rendering also happens outside any panel context (queue
+ * notifications, console, global search). Applying them once is therefore
+ * enough — and `register()` is idempotent, so adding the **same configured
+ * instance** to several panels is safe.
+ *
+ * For a multi-panel app, configure once and share the instance across panels —
+ * e.g. via a small memoized factory, so the config is built before Filament
+ * calls `register()`:
+ *
+ *     final class ModelLinkPlugin
+ *     {
+ *         private static ?FilamentModelLinkPlugin $plugin = null;
+ *
+ *         public static function make(): FilamentModelLinkPlugin
+ *         {
+ *             return self::$plugin ??= FilamentModelLinkPlugin::make()
+ *                 ->resolveIconUsing(fn (string $class) => …)
+ *                 ->registerCustomUrlResolver(fn (...) => …);
+ *         }
+ *     }
+ *
+ *     // In every PanelProvider:
+ *     $panel->plugin(ModelLinkPlugin::make());
+ *
+ * Do NOT re-chain the resolvers in each panel — `registerCustomUrlResolver()`
+ * is additive, so configuring twice would register the same resolver twice.
  */
 class FilamentModelLinkPlugin implements Plugin
 {
     /** @var array<int, Closure> */
     protected array $deferredCalls = [];
+
+    protected bool $registered = false;
 
     public static function make(): static
     {
@@ -42,11 +62,17 @@ class FilamentModelLinkPlugin implements Plugin
 
     public function register(Panel $panel): void
     {
+        // Resolvers are global — apply them once, even across multiple panels.
+        if ($this->registered) {
+            return;
+        }
+
         foreach ($this->deferredCalls as $call) {
             $call();
         }
 
         $this->deferredCalls = [];
+        $this->registered = true;
     }
 
     public function boot(Panel $panel): void
