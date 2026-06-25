@@ -166,7 +166,7 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
         $tooltip = $this->resolveTooltip($related);
 
         $tooltipAttr = $tooltip
-            ? ' x-tooltip="{ content: '.e(json_encode($tooltip)).', theme: $store.theme }"'
+            ? ' x-tooltip="{ content: '.e(json_encode($tooltip) ?: '""').', theme: $store.theme }"'
             : '';
 
         return '<div'.$tooltipAttr.'>'.ModelReferencePresenter::renderPillChain($related, $url, $this->getCharacterLimit()).'</div>';
@@ -210,7 +210,7 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
                 continue;
             }
 
-            $html .= ModelReferencePresenter::renderPillChain($model, labelLimit: $this->getCharacterLimit() ?: 25);
+            $html .= ModelReferencePresenter::renderPillChain($model, labelLimit: $this->getCharacterLimit() ?? 25);
         }
         $html .= '</div>';
 

@@ -143,7 +143,7 @@ final class Pill implements Htmlable
                 icon: $this->iconOverride,
                 label: $this->resolveLabel(),
                 iconTooltip: $this->iconTooltip,
-                linked: $this->linked && $url !== null,
+                url: $url,
             );
         }
 

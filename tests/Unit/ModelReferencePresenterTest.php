@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Mmoollllee\FilamentModelLink\FilamentModelLink;
 use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
+use Mmoollllee\FilamentModelLink\Tests\Fixtures\Palette;
 use Mmoollllee\FilamentModelLink\Tests\Fixtures\PillModel;
 
 it('renders a standalone pill with the configured color and label', function (): void {
@@ -198,4 +199,52 @@ it('returns null label / type when the related record is missing', function (): 
 
     expect(ModelReferencePresenter::displayLabel($host, 'post.title'))->toBeNull();
     expect(ModelReferencePresenter::typeBasename($host, 'post.title'))->toBeNull();
+});
+
+// ── Regression: enum color shade-keyed array must not become fi-color-50 ──
+
+it('does not turn a shade-keyed HasColor array into a numeric fi-color class', function (): void {
+    $html = ModelReferencePresenter::renderEnumOption(Palette::Shaded);
+
+    expect($html)
+        ->not->toContain('fi-color-50')
+        ->toContain('fi-color-gray'); // falls back to the default color
+});
+
+it('keeps a plain string HasColor value', function (): void {
+    expect(ModelReferencePresenter::renderEnumOption(Palette::Named))
+        ->toContain('fi-color-success');
+});
+
+// ── Regression: javascript: / data: hrefs must not render as links ──
+
+it('rejects an unsafe URL scheme and renders a plain span instead of a link', function (): void {
+    $model = PillModel::fake(['name' => 'X']);
+
+    $html = ModelReferencePresenter::renderStandalonePill($model, 'X', 'javascript:alert(1)');
+
+    expect($html)
+        ->not->toContain('<a ')
+        ->not->toContain('javascript:')
+        ->toContain('<span');
+});
+
+it('allows http(s) and relative URLs as links', function (): void {
+    $model = PillModel::fake(['name' => 'X']);
+
+    expect(ModelReferencePresenter::renderStandalonePill($model, 'X', 'https://example.test/x'))
+        ->toContain('<a href="https://example.test/x"');
+    expect(ModelReferencePresenter::renderStandalonePill($model, 'X', '/admin/posts/1'))
+        ->toContain('<a href="/admin/posts/1"');
+});
+
+// ── Regression: pill_chain_max_depth misconfigured to 0 must not crash ──
+
+it('still renders the model when pill_chain_max_depth is 0', function (): void {
+    config()->set('filament-model-link.pill_chain_max_depth', 0);
+
+    $model = PillModel::fake(['name' => 'Solo'], id: 1);
+
+    expect(ModelReferencePresenter::pillChainModels($model))->toHaveCount(1)
+        ->and(ModelReferencePresenter::renderPillChain($model))->toContain('Solo');
 });

@@ -225,16 +225,9 @@ class ModelReferencePresenter
      */
     public static function renderStandalonePill(mixed $model, string $label, ?string $url = null): string
     {
-        $color = self::pillConfig($model)['color'];
-        $classes = self::badgeClasses($color);
-        $iconHtml = self::iconHtml($model);
+        $classes = self::badgeClasses(self::pillColor($model));
 
-        if ($url) {
-            return '<a href="'.e($url).'" class="'.$classes.' transition hover:underline">'
-                .$iconHtml.e($label).'</a>';
-        }
-
-        return '<span class="'.$classes.'">'.$iconHtml.e($label).'</span>';
+        return self::wrapInBadge($classes, self::iconHtml($model).e($label), $url);
     }
 
     /**
@@ -249,9 +242,9 @@ class ModelReferencePresenter
         string $label,
         string $iconTooltip = '',
         bool $linked = false,
+        ?string $url = null,
     ): string {
-        $color = self::pillConfig($model)['color'];
-        $classes = self::badgeClasses($color);
+        $classes = self::badgeClasses(self::pillColor($model));
 
         if ($icon === null || $icon === '') {
             $iconHtml = self::iconHtml($model);
@@ -265,13 +258,10 @@ class ModelReferencePresenter
             .e($label)
             .'</span>';
 
-        $url = $linked ? self::urlForRelated($model) : null;
+        // An explicit $url (e.g. from Pill::url()) wins; otherwise resolve when linked.
+        $url ??= $linked ? self::urlForRelated($model) : null;
 
-        if ($url) {
-            return '<a href="'.e($url).'" class="'.$classes.' transition hover:underline">'.$inner.'</a>';
-        }
-
-        return '<span class="'.$classes.'">'.$inner.'</span>';
+        return self::wrapInBadge($classes, $inner, $url);
     }
 
     /**
@@ -285,7 +275,8 @@ class ModelReferencePresenter
         $chain = [];
         $cursor = $related;
         $depth = 0;
-        $max = (int) (config('filament-model-link.pill_chain_max_depth') ?? 5);
+        // At least 1 so the model itself is always rendered; the cap limits ancestors.
+        $max = max(1, (int) (config('filament-model-link.pill_chain_max_depth') ?? 5));
 
         while ($cursor !== null && $depth++ < $max) {
             array_unshift($chain, $cursor);
@@ -368,7 +359,13 @@ class ModelReferencePresenter
 
         $label = $model->name ?? $model->title ?? null;
 
-        return filled($label) ? (string) $label : class_basename($model).' #'.$model->getKey();
+        if (filled($label)) {
+            return (string) $label;
+        }
+
+        $type = $model instanceof HasPills ? $model::label() : class_basename($model);
+
+        return $type.' #'.$model->getKey();
     }
 
     /**
@@ -404,9 +401,14 @@ class ModelReferencePresenter
 
         $color = $case instanceof HasColor ? $case->getColor() : null;
         if (is_array($color)) {
-            $color = array_key_first($color) ?? null;
+            // HasColor may return a shade-keyed Color array ([50 => …, 600 => …]);
+            // a numeric first key is a shade, not a usable palette name — discard it.
+            $firstKey = array_key_first($color);
+            $color = is_string($firstKey) ? $firstKey : null;
         }
-        $color ??= (string) (config('filament-model-link.default_color') ?? 'gray');
+        $color = is_string($color) && $color !== ''
+            ? $color
+            : (string) (config('filament-model-link.default_color') ?? 'gray');
 
         $iconHtml = $case instanceof HasIcon ? self::renderIcon($case->getIcon()) : '';
 
@@ -441,30 +443,25 @@ class ModelReferencePresenter
     }
 
     /**
-     * Read display metadata (label + color) from the model's HasPills contract.
-     * Fallback: class basename + configured default color.
-     *
-     * @return array{label: string, color: string}
+     * Resolve the pill color for a model via the HasPills contract.
+     * Fallback: the configured default color.
      */
-    protected static function pillConfig(object|string|null $modelOrClass): array
+    protected static function pillColor(object|string|null $modelOrClass): string
     {
         $defaultColor = (string) (config('filament-model-link.default_color') ?? 'gray');
 
         if ($modelOrClass === null) {
-            return ['label' => '', 'color' => $defaultColor];
+            return $defaultColor;
         }
 
         $class = is_string($modelOrClass) ? $modelOrClass : $modelOrClass::class;
 
         if (is_subclass_of($class, HasPills::class)) {
             /** @var class-string<HasPills> $class */
-            return [
-                'label' => $class::label(),
-                'color' => $class::color(),
-            ];
+            return $class::color();
         }
 
-        return ['label' => class_basename($class), 'color' => $defaultColor];
+        return $defaultColor;
     }
 
     /**
@@ -490,7 +487,9 @@ class ModelReferencePresenter
     protected static function displayLabelForRelated(mixed $record, string $name, mixed $related): ?string
     {
         $attribute = self::attribute($name);
-        $label = $attribute ? data_get($record, $name) : ($related->name ?? null);
+        // For a dotless reference, defer to labelForRelated() so HasPillLabel is
+        // honored instead of reading a raw `name` that may not be the pill label.
+        $label = $attribute ? data_get($record, $name) : null;
 
         if ($label === null || $label === '') {
             $label = self::labelForRelated($related);
@@ -565,6 +564,43 @@ class ModelReferencePresenter
         return 'fi-badge fi-size-sm fi-color fi-color-'.e($color);
     }
 
+    /**
+     * Wrap pill inner-HTML in a badge `<span>`, or an `<a>` when a safe URL is
+     * given. Centralizes the badge markup so the link/span shape stays in sync.
+     */
+    protected static function wrapInBadge(string $classes, string $inner, ?string $url): string
+    {
+        $href = self::safeHref($url);
+
+        if ($href !== null) {
+            return '<a href="'.e($href).'" class="'.$classes.' transition hover:underline">'.$inner.'</a>';
+        }
+
+        return '<span class="'.$classes.'">'.$inner.'</span>';
+    }
+
+    /**
+     * Permit only relative URLs and http(s) hrefs. Rejects `javascript:`,
+     * `data:`, `vbscript:` and any other scheme so a custom URL resolver or a
+     * route parameter cannot inject an executable href into a rendered pill.
+     */
+    protected static function safeHref(?string $url): ?string
+    {
+        if ($url === null || $url === '') {
+            return null;
+        }
+
+        $trimmed = ltrim($url);
+
+        // No URI scheme (relative path, query, or fragment) → safe.
+        if (preg_match('#^[a-z][a-z0-9+.\-]*:#i', $trimmed) !== 1) {
+            return $url;
+        }
+
+        // Has a scheme: allow only http/https.
+        return preg_match('#^https?:#i', $trimmed) === 1 ? $url : null;
+    }
+
     protected static function iconHtml(mixed $model): string
     {
         $icon = self::resolveIconFor($model);
@@ -613,7 +649,8 @@ class ModelReferencePresenter
         try {
             return self::$iconCache[$cacheKey] = (string) generate_icon_html($icon, size: $size)?->toHtml();
         } catch (Throwable) {
-            return self::$iconCache[$cacheKey] = '';
+            // Don't memoize a transient failure — a later call may succeed.
+            return '';
         }
     }
 

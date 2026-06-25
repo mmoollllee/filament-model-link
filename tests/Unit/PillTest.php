@@ -64,6 +64,19 @@ it('renders a link when an explicit URL is given', function (): void {
         ->toContain('hover:underline');
 });
 
+it('keeps an explicit URL when combined with an icon override', function (): void {
+    $model = PillModel::fake(['name' => 'L']);
+
+    // Regression: the icon-override path used to recompute the URL and drop ->url().
+    $html = Pill::for($model)
+        ->icon(Heroicon::Star)
+        ->iconTooltip('Featured')
+        ->url('https://example.test/custom')
+        ->toHtml();
+
+    expect($html)->toContain('<a href="https://example.test/custom"');
+});
+
 it('falls back to the configured custom URL resolver when linked', function (): void {
     FilamentModelLink::configure()
         ->registerCustomUrlResolver(fn ($r) => 'https://resolver.test/x');
