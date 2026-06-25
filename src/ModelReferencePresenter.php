@@ -102,6 +102,7 @@ class ModelReferencePresenter
         self::$resourceParametersResolver = null;
         self::$customUrlResolvers = [];
         self::$iconCache = [];
+        self::$resourceCache = [];
     }
 
     // ── Public API ────────────────────────────────────────────────────────
@@ -189,7 +190,7 @@ class ModelReferencePresenter
             return null;
         }
 
-        ['resource' => $resource, 'panel' => $panel] = self::resolveResource($related);
+        [$resource, $panel] = self::resolveResource($related);
 
         if (! $resource) {
             return null;
@@ -406,13 +407,11 @@ class ModelReferencePresenter
             $firstKey = array_key_first($color);
             $color = is_string($firstKey) ? $firstKey : null;
         }
-        $color = is_string($color) && $color !== ''
-            ? $color
-            : (string) (config('filament-model-link.default_color') ?? 'gray');
+        $color = is_string($color) && $color !== '' ? $color : self::defaultColor();
 
         $iconHtml = $case instanceof HasIcon ? self::renderIcon($case->getIcon()) : '';
 
-        return '<span class="'.self::badgeClasses($color).'">'.$iconHtml.e($label).'</span>';
+        return self::wrapInBadge(self::badgeClasses($color), $iconHtml.e($label), null);
     }
 
     /**
@@ -448,20 +447,21 @@ class ModelReferencePresenter
      */
     protected static function pillColor(object|string|null $modelOrClass): string
     {
-        $defaultColor = (string) (config('filament-model-link.default_color') ?? 'gray');
+        if ($modelOrClass !== null) {
+            $class = is_string($modelOrClass) ? $modelOrClass : $modelOrClass::class;
 
-        if ($modelOrClass === null) {
-            return $defaultColor;
+            if (is_subclass_of($class, HasPills::class)) {
+                /** @var class-string<HasPills> $class */
+                return $class::color();
+            }
         }
 
-        $class = is_string($modelOrClass) ? $modelOrClass : $modelOrClass::class;
+        return self::defaultColor();
+    }
 
-        if (is_subclass_of($class, HasPills::class)) {
-            /** @var class-string<HasPills> $class */
-            return $class::color();
-        }
-
-        return $defaultColor;
+    protected static function defaultColor(): string
+    {
+        return (string) (config('filament-model-link.default_color') ?? 'gray');
     }
 
     /**
@@ -503,14 +503,34 @@ class ModelReferencePresenter
     }
 
     /**
-     * @return array{resource: mixed, panel: ?string}
+     * Resolve [resourceClass, panelId] for a model. Memoized per (current panel,
+     * model class) for the request — the same class is re-resolved once per row,
+     * dropdown option, and chain segment otherwise.
+     *
+     * @return array{0: mixed, 1: ?string}
      */
     protected static function resolveResource(mixed $related): array
     {
-        if (self::$resourceResolver !== null) {
-            [$resource, $panel] = (self::$resourceResolver)($related);
+        if (! is_object($related)) {
+            return [null, null];
+        }
 
-            return ['resource' => $resource, 'panel' => $panel];
+        try {
+            $panelContext = Filament::getCurrentPanel()?->getId() ?? '';
+        } catch (Throwable) {
+            $panelContext = '';
+        }
+
+        return self::$resourceCache[$panelContext.'|'.$related::class] ??= self::computeResource($related);
+    }
+
+    /**
+     * @return array{0: mixed, 1: ?string}
+     */
+    private static function computeResource(mixed $related): array
+    {
+        if (self::$resourceResolver !== null) {
+            return (self::$resourceResolver)($related);
         }
 
         // Filament may not be booted (e.g. running outside a panel context,
@@ -519,33 +539,32 @@ class ModelReferencePresenter
         try {
             $resources = Filament::getResources();
         } catch (Throwable) {
-            return ['resource' => null, 'panel' => null];
+            return [null, null];
         }
 
         $resource = collect($resources)->first(
             fn ($candidate) => $related instanceof ($candidate::getModel())
         );
 
-        $panel = null;
+        if ($resource) {
+            return [$resource, null];
+        }
 
-        if (! $resource) {
-            foreach (Filament::getPanels() as $candidatePanel) {
-                $resource = collect($candidatePanel->getResources())->first(
-                    fn ($candidate) => $related instanceof ($candidate::getModel())
-                );
+        foreach (Filament::getPanels() as $candidatePanel) {
+            $resource = collect($candidatePanel->getResources())->first(
+                fn ($candidate) => $related instanceof ($candidate::getModel())
+            );
 
-                if ($resource) {
-                    $panel = $candidatePanel->getId();
-                    break;
-                }
+            if ($resource) {
+                return [$resource, $candidatePanel->getId()];
             }
         }
 
-        return [
-            'resource' => $resource,
-            'panel' => $panel,
-        ];
+        return [null, null];
     }
+
+    /** @var array<string, array{0: mixed, 1: ?string}> */
+    protected static array $resourceCache = [];
 
     /**
      * @return array<string, mixed>
@@ -603,17 +622,8 @@ class ModelReferencePresenter
 
     protected static function iconHtml(mixed $model): string
     {
-        $icon = self::resolveIconFor($model);
-
-        if (blank($icon)) {
-            return '';
-        }
-
-        try {
-            return self::renderIcon($icon);
-        } catch (Throwable) {
-            return '';
-        }
+        // renderIcon() already returns '' for blank icons and swallows failures.
+        return self::renderIcon(self::resolveIconFor($model));
     }
 
     protected static function resolveIconFor(mixed $model): string|BackedEnum|null
