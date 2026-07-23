@@ -42,7 +42,9 @@ final class Pill implements Htmlable
 
     protected ?int $ancestorLabelLimit = null;
 
-    public function __construct(protected Model $model) {}
+    protected ?string $color = null;
+
+    public function __construct(protected ?Model $model = null) {}
 
     /**
      * Single pill for a model.
@@ -50,6 +52,16 @@ final class Pill implements Htmlable
     public static function for(Model $model): self
     {
         return new self($model);
+    }
+
+    /**
+     * Raw pill with no model behind it — value pills like dates, counters, or
+     * statuses that should look exactly like model pills. `linked()` and
+     * `asChain()` need a model and are ignored; set `url()` explicitly.
+     */
+    public static function make(string $label): self
+    {
+        return (new self)->label($label);
     }
 
     /**
@@ -97,6 +109,18 @@ final class Pill implements Htmlable
     }
 
     /**
+     * Override the pill color (a Filament palette name such as `danger`).
+     * Beats the model's HasPills color — use it for per-record status colors.
+     * On a chain, only the target segment is recolored.
+     */
+    public function color(?string $color): self
+    {
+        $this->color = $color;
+
+        return $this;
+    }
+
+    /**
      * Force a specific URL. Beats `linked()` resolution and any registered
      * custom URL resolvers.
      */
@@ -134,6 +158,16 @@ final class Pill implements Htmlable
 
     public function toHtml(): string
     {
+        if ($this->model === null) {
+            return ModelReferencePresenter::renderPill(
+                label: $this->label ?? '',
+                color: $this->color,
+                icon: $this->iconOverride,
+                url: $this->url,
+                iconTooltip: $this->iconTooltip,
+            );
+        }
+
         $url = $this->url
             ?? ($this->linked ? ModelReferencePresenter::urlForRelated($this->model) : null);
 
@@ -144,6 +178,7 @@ final class Pill implements Htmlable
                 label: $this->resolveLabel(),
                 iconTooltip: $this->iconTooltip,
                 url: $url,
+                color: $this->color,
             );
         }
 
@@ -153,6 +188,7 @@ final class Pill implements Htmlable
                 url: $url,
                 labelLimit: $this->labelLimit,
                 ancestorLabelLimit: $this->ancestorLabelLimit,
+                targetColor: $this->color,
             );
         }
 
@@ -160,6 +196,7 @@ final class Pill implements Htmlable
             model: $this->model,
             label: $this->resolveLabel(),
             url: $url,
+            color: $this->color,
         );
     }
 
@@ -179,6 +216,6 @@ final class Pill implements Htmlable
             return $this->label;
         }
 
-        return ModelReferencePresenter::basePillLabel($this->model);
+        return $this->model !== null ? ModelReferencePresenter::basePillLabel($this->model) : '';
     }
 }

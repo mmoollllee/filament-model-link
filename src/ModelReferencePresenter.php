@@ -11,6 +11,8 @@ use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Enums\IconSize;
+use Filament\Support\Facades\FilamentColor;
+use Filament\Support\View\Components\BadgeComponent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -218,15 +220,33 @@ class ModelReferencePresenter
     // ── Rendering ─────────────────────────────────────────────────────────
 
     /**
+     * Render a raw pill with no model behind it — for value pills like dates,
+     * counters, or statuses that should look exactly like model pills.
+     * Color falls back to the configured default; icon and link are optional.
+     */
+    public static function renderPill(
+        string $label,
+        ?string $color = null,
+        string|BackedEnum|null $icon = null,
+        ?string $url = null,
+        string $iconTooltip = '',
+    ): string {
+        $classes = self::badgeClasses(filled($color) ? $color : self::defaultColor());
+
+        return self::wrapInBadge($classes, self::iconSpan(self::renderIcon($icon), $iconTooltip).e($label), $url);
+    }
+
+    /**
      * Render a model as a full colored pill (outer `<span class="fi-badge fi-color-X">`)
      * with icon and label. Optionally wrapped in a link.
      *
      * Use this when the caller provides no surrounding badge of its own
      * (tables, form display components, free HTML, single-select dropdowns).
+     * $color overrides the model's HasPills color — e.g. a per-record status.
      */
-    public static function renderStandalonePill(mixed $model, string $label, ?string $url = null): string
+    public static function renderStandalonePill(mixed $model, string $label, ?string $url = null, ?string $color = null): string
     {
-        $classes = self::badgeClasses(self::pillColor($model));
+        $classes = self::badgeClasses(filled($color) ? $color : self::pillColor($model));
 
         return self::wrapInBadge($classes, self::iconHtml($model).e($label), $url);
     }
@@ -244,8 +264,9 @@ class ModelReferencePresenter
         string $iconTooltip = '',
         bool $linked = false,
         ?string $url = null,
+        ?string $color = null,
     ): string {
-        $classes = self::badgeClasses(self::pillColor($model));
+        $classes = self::badgeClasses(filled($color) ? $color : self::pillColor($model));
 
         // A caller-supplied icon replaces the model's default; when none is
         // given, fall back to the default icon but keep the tooltip on it.
@@ -253,13 +274,9 @@ class ModelReferencePresenter
             ? self::iconHtml($model)
             : self::renderIcon($icon);
 
-        $titleAttr = $iconTooltip !== '' ? ' title="'.e($iconTooltip).'"' : '';
-        $iconHtml = '<span class="inline-flex"'.$titleAttr.'>'.$iconInner.'</span>';
-
-        $inner = '<span class="inline-flex items-center gap-1.5">'
-            .$iconHtml
-            .e($label)
-            .'</span>';
+        // No extra flex wrapper around icon + label: `.fi-badge` is already an
+        // inline-flex row with its own gap, exactly like renderStandalonePill().
+        $inner = self::iconSpan($iconInner, $iconTooltip).e($label);
 
         // An explicit $url (e.g. from Pill::url()) wins; otherwise resolve when linked.
         $url ??= $linked ? self::urlForRelated($model) : null;
@@ -279,7 +296,7 @@ class ModelReferencePresenter
         $cursor = $related;
         $depth = 0;
         // At least 1 so the model itself is always rendered; the cap limits ancestors.
-        $max = max(1, (int) (config('filament-model-link.pill_chain_max_depth') ?? 5));
+        $max = max(1, (int) (config('filament-model-link.pill_chain_max_depth') ?? 4));
 
         while ($cursor !== null && $depth++ < $max) {
             array_unshift($chain, $cursor);
@@ -318,6 +335,7 @@ class ModelReferencePresenter
         ?string $url = null,
         ?int $labelLimit = null,
         ?int $ancestorLabelLimit = null,
+        ?string $targetColor = null,
     ): string {
         $ancestorLabelLimit ??= (int) (config('filament-model-link.ancestor_label_limit') ?? 20);
 
@@ -329,7 +347,7 @@ class ModelReferencePresenter
         }
 
         if (count($chain) === 1) {
-            return self::renderStandalonePill($chain[0], $targetLabel, $url ?? self::urlForRelated($chain[0]));
+            return self::renderStandalonePill($chain[0], $targetLabel, $url ?? self::urlForRelated($chain[0]), $targetColor);
         }
 
         $segments = [];
@@ -341,12 +359,100 @@ class ModelReferencePresenter
 
             $segmentUrl = ($isTarget && $url !== null) ? $url : self::urlForRelated($model);
 
-            $segments[] = self::renderStandalonePill($model, $label, $segmentUrl);
+            $segments[] = self::renderStandalonePill($model, $label, $segmentUrl, $isTarget ? $targetColor : null);
         }
 
-        return '<span class="fi-pill-chain inline-flex items-stretch [&>*]:!rounded-none [&>*:first-child]:!rounded-s-md [&>*:last-child]:!rounded-e-md">'
-            .implode('', $segments)
-            .'</span>';
+        // Hook class only — the layout lives in the package stylesheet. Tailwind
+        // utilities cannot be emitted from here: this file sits in the consumer's
+        // vendor/, which their Tailwind build does not scan, so any utility not
+        // coincidentally used elsewhere in their app is never generated.
+        return '<span class="fi-pill-chain">'.implode('', $segments).'</span>';
+    }
+
+    /**
+     * Render many models as pill chains inside a single flex-wrap container.
+     *
+     * Accepts any iterable (Eloquent Collection, array, …). Entries that are
+     * not Eloquent models are skipped, exact duplicates (same class + key)
+     * render once, and models that already appear as a chain ancestor of
+     * another entry are dropped as standalone targets — their ancestor pill
+     * already represents them.
+     *
+     * $maxPills caps how many chains render; the remainder collapses into a
+     * "+N" overflow pill whose title lists the hidden labels. Non-positive
+     * values mean unlimited. Returns '' when nothing is renderable, so
+     * callers can distinguish "empty" without parsing HTML.
+     *
+     * Per-segment URLs resolve via `urlForRelated()` with the default view
+     * types — pass individually rendered chains when per-call view types are
+     * required.
+     *
+     * @param  iterable<int, mixed>  $models
+     */
+    public static function renderPillChains(
+        iterable $models,
+        ?int $labelLimit = null,
+        ?int $maxPills = null,
+    ): string {
+        $unique = [];
+        foreach ($models as $model) {
+            if ($model instanceof Model) {
+                $unique[$model::class.':'.$model->getKey()] ??= $model;
+            }
+        }
+
+        if ($unique === []) {
+            return '';
+        }
+
+        $ancestors = [];
+        foreach ($unique as $model) {
+            $chain = self::pillChainModels($model);
+            array_pop($chain);
+            foreach ($chain as $ancestor) {
+                $ancestors[$ancestor::class.':'.$ancestor->getKey()] = true;
+            }
+        }
+
+        $targets = [];
+        foreach ($unique as $key => $model) {
+            if (! isset($ancestors[$key])) {
+                $targets[] = $model;
+            }
+        }
+
+        // A pathological parent cycle can mark every entry as an ancestor;
+        // rendering nothing would hide real data, so fall back to all entries.
+        if ($targets === []) {
+            $targets = array_values($unique);
+        }
+
+        if ($maxPills !== null && $maxPills < 1) {
+            $maxPills = null;
+        }
+
+        $overflow = [];
+        if ($maxPills !== null && count($targets) > $maxPills) {
+            $overflow = array_slice($targets, $maxPills);
+            $targets = array_slice($targets, 0, $maxPills);
+        }
+
+        // Hook class only — see renderPillChain() on why no Tailwind here.
+        $html = '<div class="fi-pill-chains">';
+        foreach ($targets as $model) {
+            $html .= self::renderPillChain($model, labelLimit: $labelLimit);
+        }
+
+        if ($overflow !== []) {
+            $hidden = implode(', ', array_map(
+                fn (Model $model): string => self::basePillLabel($model),
+                $overflow,
+            ));
+
+            $html .= '<span class="'.self::badgeClasses(self::defaultColor()).'" title="'.e($hidden).'">+'.count($overflow).'</span>';
+        }
+
+        return $html.'</div>';
     }
 
     /**
@@ -372,27 +478,73 @@ class ModelReferencePresenter
     }
 
     /**
+     * Plain-text labels for a collection of models, keyed the same way as
+     * `modelSelectOptions()`.
+     *
+     * This is the counterpart for the SELECTED values of a `->multiple()`
+     * Select. Filament renders every selected value inside its own chip, so a
+     * full pill there nests a badge in a badge. Feed pills to the dropdown
+     * (`options()` / `getSearchResultsUsing()`) and these labels to
+     * `getOptionLabelsUsing()` / `getOptionLabelUsing()`.
+     *
+     * @param  Collection<int, Model>  $models
+     * @return array<int|string, string>
+     */
+    public static function modelSelectLabels(
+        Collection $models,
+        ?string $labelAttribute = null,
+        ?callable $labelCallback = null,
+    ): array {
+        return $models->mapWithKeys(fn (Model $model): array => [
+            $model->getKey() => self::selectLabelFor($model, $labelAttribute, $labelCallback),
+        ])->all();
+    }
+
+    /**
      * Build HTML select options (full colored pills) from a collection of models.
      *
      * Pass $linked = true to wrap every pill in an `<a>` pointing at the
      * model's resource (resolved via `urlForRelated()`); options for models
      * without a resolvable URL silently fall back to plain pills.
      *
+     * NOTE for `->multiple()` Selects: use this for the DROPDOWN only. Filament
+     * wraps each selected value in its own chip, so returning a pill from
+     * `getOptionLabelsUsing()` / `getOptionLabelFromRecordUsing()` renders a
+     * badge inside a badge. Pair it with `modelSelectLabels()` there.
+     *
      * @param  Collection<int, Model>  $models
      * @return array<int|string, string>
      */
     public static function modelSelectOptions(
         Collection $models,
-        string $labelAttribute = 'name',
+        ?string $labelAttribute = null,
         ?callable $labelCallback = null,
         bool $linked = false,
     ): array {
-        return $models->mapWithKeys(function ($model) use ($labelAttribute, $labelCallback, $linked) {
-            $label = $labelCallback ? $labelCallback($model) : (string) $model->{$labelAttribute};
+        return $models->mapWithKeys(function (Model $model) use ($labelAttribute, $labelCallback, $linked): array {
+            $label = self::selectLabelFor($model, $labelAttribute, $labelCallback);
             $url = $linked ? self::urlForRelated($model) : null;
 
             return [$model->getKey() => self::renderStandalonePill($model, $label, $url)];
         })->all();
+    }
+
+    /**
+     * Shared label resolution for both select helpers: an explicit callback
+     * wins, then an explicit attribute, then `basePillLabel()` — which honors
+     * `HasPillLabel` and falls back to name/title, so a select label never
+     * disagrees with the same model's pill elsewhere.
+     */
+    protected static function selectLabelFor(
+        Model $model,
+        ?string $labelAttribute,
+        ?callable $labelCallback,
+    ): string {
+        return match (true) {
+            $labelCallback !== null => (string) $labelCallback($model),
+            $labelAttribute !== null => (string) $model->{$labelAttribute},
+            default => self::basePillLabel($model),
+        };
     }
 
     /**
@@ -580,9 +732,54 @@ class ModelReferencePresenter
         return ['record' => $related];
     }
 
+    /**
+     * The class list for a pill, delegated to Filament's own badge resolver so
+     * a pill is byte-identical to a badge Filament renders itself.
+     *
+     * Hand-writing `fi-color fi-color-X` is not enough and was a real bug:
+     * `.fi-badge.fi-color` sets `color: var(--text)`, and `--text` is set
+     * *only* by the `fi-text-color-{shade}` classes, which Filament derives per
+     * color from WCAG contrast against the palette. Without them the
+     * declaration is invalid at computed-value time and the pill's text falls
+     * back to the inherited color — so the same report type rendered one color
+     * in a table badge and another in a select pill.
+     *
+     * The resolved list is merged with `fi-color fi-color-X` rather than
+     * replacing it: Filament returns an empty list for its default gray, and
+     * both this package's stylesheet and consumer CSS key on `fi-color-X` as a
+     * hook. Keeping it costs nothing — for every other color Filament already
+     * includes both classes, so the merge deduplicates to exactly its output.
+     */
+    /**
+     * The span that carries an icon's tooltip. Returns '' for a blank icon —
+     * without that guard an empty span still occupies `.fi-badge`'s column gap
+     * and hangs a `title` on a zero-width box nobody can hover.
+     */
+    protected static function iconSpan(string $iconHtml, string $tooltip): string
+    {
+        if ($iconHtml === '') {
+            return '';
+        }
+
+        return '<span class="fi-pill-icon"'
+            .($tooltip !== '' ? ' title="'.e($tooltip).'"' : '')
+            .'>'.$iconHtml.'</span>';
+    }
+
     protected static function badgeClasses(string $color): string
     {
-        return 'fi-badge fi-size-sm fi-color fi-color-'.e($color);
+        try {
+            $resolved = FilamentColor::getComponentClasses(BadgeComponent::class, $color);
+        } catch (Throwable) {
+            $resolved = [];
+        }
+
+        $classes = array_unique(array_merge(
+            ['fi-badge', 'fi-size-sm', 'fi-color', 'fi-color-'.$color],
+            $resolved,
+        ));
+
+        return e(implode(' ', $classes));
     }
 
     /**
@@ -594,7 +791,10 @@ class ModelReferencePresenter
         $href = self::safeHref($url);
 
         if ($href !== null) {
-            return '<a href="'.e($href).'" class="'.$classes.' transition hover:underline">'.$inner.'</a>';
+            // `fi-pill-link` marks a pill whose href is real, so the stylesheet
+            // can give it hover feedback — and withhold it where Filament
+            // intercepts the click (dropdown options).
+            return '<a href="'.e($href).'" class="'.$classes.' fi-pill-link">'.$inner.'</a>';
         }
 
         return '<span class="'.$classes.'">'.$inner.'</span>';

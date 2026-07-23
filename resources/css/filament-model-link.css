@@ -1,0 +1,271 @@
+/*
+ * filament-model-link — Filament theme adjustments.
+ *
+ * Import once in your panel theme (resources/css/filament/<panel>/theme.css):
+ *
+ *     @import "../../../../vendor/mmoollllee/filament-model-link/resources/css/filament-model-link.css";
+ *
+ * Plain CSS, no Tailwind build step required. The select rules are scoped to
+ * Filament's select markup; the pill hooks (`.fi-pill-*`) and the
+ * `.fi-badge-label` alignment rules are global by necessity, but every one of
+ * them is guarded so it only fires where this package's own markup is present.
+ */
+
+/* ── Layout: why it lives here and not in the markup ───────────────────────
+ *
+ * This package's PHP sits in the consumer's vendor/, which their Tailwind build
+ * does not scan. A utility class emitted from there only works if their own app
+ * code happens to use the same one — `flex` and `inline-flex` did, `gap-1.5`,
+ * `items-stretch` and `rounded-none` did not, so chains rendered gapless and
+ * fully rounded. Utilities are unreliable from a package: layout belongs here,
+ * markup carries hook classes only.
+ */
+
+/* ── Pill chains: one continuous chip ──────────────────────────────────────
+ *
+ * `renderPillChain()` wraps two or more segments in `.fi-pill-chain`. Only the
+ * outer edges stay rounded, so the segments read as one chip with several color
+ * bands rather than a row of separate pills.
+ *
+ * `> .fi-badge` (0,2,0) rather than `> *` (0,1,0) on purpose: Filament's own
+ * `.fi-badge` sets `rounded-md` at (0,1,0), so `> *` would only win on import
+ * order. This wins outright, whatever a consumer's theme.css looks like.
+ *
+ * Logical properties, so it holds in RTL too.
+ */
+.fi-pill-chain {
+    display: inline-flex;
+}
+
+.fi-pill-chain > .fi-badge {
+    border-radius: 0;
+}
+
+.fi-pill-chain > .fi-badge:first-child {
+    border-end-start-radius: var(--radius-md, 0.375rem);
+    border-start-start-radius: var(--radius-md, 0.375rem);
+}
+
+.fi-pill-chain > .fi-badge:last-child {
+    border-end-end-radius: var(--radius-md, 0.375rem);
+    border-start-end-radius: var(--radius-md, 0.375rem);
+}
+
+/* `renderPillChains()` puts several chains in one wrapping row. */
+.fi-pill-chains {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+}
+
+/* `ModelLinkColumn`'s "no related record" text. Matches Filament's own muted
+ * cell styling; it carried Tailwind utilities before, which never rendered. */
+.fi-pill-placeholder {
+    color: var(--color-gray-400, #99a1af);
+    font-size: var(--text-sm, 0.875rem);
+}
+
+.dark .fi-pill-placeholder {
+    color: var(--color-gray-500, #6a7282);
+}
+
+/* `.fi-pill-icon` — the span that carries an icon's tooltip — is emitted but
+ * deliberately NOT styled here. It exists to hang `title` on; `.fi-badge` is
+ * already an inline-flex row with its own gap, and the span's only child is an
+ * <svg>, which Preflight sets to `display: block`. A `display: inline-flex`
+ * rule was measured to change nothing (20px pill either way) and removed. The
+ * class stays as an extension point for consumers who do want to target it.
+ */
+
+/* ── Pills inside a Filament text container: vertical alignment ────────────
+ *
+ * A pill is an inline-flex box. Dropped into one of Filament's text containers
+ * it is aligned on the *text baseline* of that container, and the container's
+ * own strut — `text-sm` / `leading-6` — reserves more room below the baseline
+ * than the pill needs. The pill ends up off-centre and the row grows.
+ *
+ * Filament solves this for its own badges with
+ * `.fi-ta-text-item.fi-ta-text-has-badges > .fi-badge { vertical-align: middle }`,
+ * but only sets that marker class when `->badge()` was called. A pill injected
+ * through `formatStateUsing()` never gets it, so the package covers the four
+ * containers where its own markup can land: both select value containers, table
+ * cells and infolist entries. Measured with the strut gone, the container
+ * collapses to the pill's own height (0/0 offset) in every one of them.
+ *
+ * Measured in Chromium against a real select DOM (identical in system-ui,
+ * Helvetica and Georgia, so this is structural, not a font quirk):
+ *
+ *                        before            after
+ *   single select row    37px              36px  (= plain-text reference)
+ *   single select pill   6px top/11px bot  8/8
+ *   multi select row     38px              36px
+ *   multi wrapper badge  26px              24px
+ *   multi select pill    8px top/10px bot  8/8
+ *
+ * The fix zeroes the container's line-height, which removes the strut, and
+ * aligns the pill on the text middle. `:has()` keeps it surgical — a
+ * plain-text value keeps Filament's normal layout untouched, and the badge's
+ * delete button (a sibling of the label container) is never in scope.
+ *
+ * NOT `display: flex` on the container, which also centres and was tried
+ * first: it makes the pill a flex item, and `.fi-badge`'s own
+ * `justify-content: center` then clips an over-long label at BOTH ends
+ * instead of only the trailing one — cutting off the leading characters,
+ * which for a label like "186-43316 (Liebherr 32TT)" is the identifier.
+ * Flexing the container also disables the `text-overflow` Filament sets on
+ * it. Keeping the container a block preserves both behaviours.
+ */
+.fi-select-input-value-label:has(> .fi-badge),
+.fi-select-input-value-label:has(> .fi-pill-chain),
+.fi-badge-label:has(> .fi-badge),
+.fi-badge-label:has(> .fi-pill-chain),
+.fi-ta-text-item:has(> .fi-badge),
+.fi-ta-text-item:has(> .fi-pill-chain),
+.fi-in-text-item:has(> .fi-badge),
+.fi-in-text-item:has(> .fi-pill-chain) {
+    line-height: 0;
+}
+
+.fi-select-input-value-label > .fi-badge,
+.fi-select-input-value-label > .fi-pill-chain,
+.fi-badge-label > .fi-badge,
+.fi-badge-label > .fi-pill-chain,
+.fi-ta-text-item > .fi-badge,
+.fi-ta-text-item > .fi-pill-chain,
+.fi-in-text-item > .fi-badge,
+.fi-in-text-item > .fi-pill-chain {
+    vertical-align: middle;
+}
+
+/* ── Multi-select: flatten the outer badge that wraps our pill ──────────────
+ *
+ * Filament's select.js renders every selected value through createBadgeElement,
+ * which hardcodes an `fi-color-primary` badge around the option label. Our pill
+ * already carries its own color, icon and link, so that wrapper is pure visual
+ * noise — a badge inside a badge.
+ *
+ * Neutralising the wrapper is the only available fix: the badge label comes
+ * straight from the loaded options array (select.js fills `labelRepository`
+ * from it and only falls back to `getOptionLabelsUsing()` for values missing
+ * from it), so no PHP-side hook can give the dropdown and the badge different
+ * markup.
+ *
+ * `:has()` keeps this surgical — a selected value WITHOUT a pill keeps
+ * Filament's normal badge styling.
+ *
+ * The inline-end padding stays so the delete button (×) is not clipped.
+ */
+.fi-select-input-value-badges-ctn .fi-badge:has(> .fi-badge-label-ctn .fi-badge),
+.fi-select-input-value-badges-ctn .fi-badge:has(> .fi-badge-label-ctn .fi-pill-chain) {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding-inline-start: 0 !important;
+    padding-inline-end: 0.5rem !important;
+}
+
+/* ── Linked pills: button-like hover ───────────────────────────────────────
+ *
+ * `.fi-pill-link` is set by the presenter on pills that actually carry an
+ * href. The feedback is deliberately not an underline: a pill reads as a
+ * button, so it should behave like one — the surface reacts, not the text.
+ *
+ * `brightness()` works on every palette color without a rule per color, and
+ * keeps its own contrast ratio intact. `currentColor` in the ring inherits the
+ * pill's own text color, so the outline matches whatever `fi-color-X` is in
+ * play — including dark mode, without a second rule.
+ */
+.fi-pill-link {
+    text-decoration: none;
+    /* The transparent ring is declared here on purpose: `outline-style` is not
+     * animatable, so without it hovering flips none -> solid and the ring snaps
+     * in. Declared up front, only `outline-color` changes and it eases. */
+    outline: 1px solid transparent;
+    outline-offset: -1px;
+    transition:
+        filter 100ms ease,
+        outline-color 100ms ease;
+}
+
+/* `outline` with a NEGATIVE offset, deliberately — two reasons.
+ *
+ * Clipping: an outward ring is painted beyond the border box, where an ancestor
+ * can crop it. In a multi-select that is exactly what happened. Filament's
+ * `.fi-badge:not(.fi-wrapped)` is `truncate`, i.e. `overflow: hidden`, and the
+ * flattening rule below sets `padding-inline-start: 0` on that wrapper — so the
+ * pill sits flush against a clipping edge and an outward ring lost its
+ * inline-start side, while the 0.5rem of inline-end padding kept the other side
+ * intact. A negative offset draws the ring inside the pill's own border box,
+ * out of reach of any ancestor's overflow.
+ *
+ * Not box-shadow: Filament's `.fi-badge` already carries its 1px ring as a
+ * composed `box-shadow`, so setting box-shadow here would replace that ring
+ * instead of joining it. `outline` is a separate property and simply stacks.
+ *
+ * An outline follows `border-radius`, so a middle chain segment gets a square
+ * hover ring matching its flattened corners — no extra rule needed. */
+.fi-pill-link:hover {
+    filter: brightness(0.94);
+    outline-color: color-mix(in oklab, currentColor 35%, transparent);
+}
+
+/* Press feedback is brightness only, no nudge: inside a chain a transform would
+ * shift one segment against its neighbours and break the continuous chip. */
+.fi-pill-link:active {
+    filter: brightness(0.88);
+}
+
+.fi-pill-link:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: -2px;
+}
+
+.dark .fi-pill-link:hover {
+    filter: brightness(1.15);
+}
+
+.dark .fi-pill-link:active {
+    filter: brightness(1.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fi-pill-link {
+        transition: none;
+    }
+}
+
+/* ── Dropdown options: no link affordance at all ───────────────────────────
+ *
+ * In the dropdown the anchor is provably dead: Filament's option click handler
+ * calls preventDefault() and stopPropagation() (see the option element's click
+ * listener in select.js), so the click selects the option and never follows the
+ * href. Hover feedback would promise navigation that cannot happen — the row's
+ * own highlight is the correct affordance there.
+ *
+ * The selected value is neutralised for a second, worse reason: select.js
+ * seeds its label repository straight from the options array, so a selected
+ * badge reuses the dropdown's markup verbatim — anchor included — and appends
+ * it to the select's own `<button>`. A live link there is invalid HTML, adds a
+ * tab stop per selected value, and navigates away mid-edit when the user only
+ * meant to remove the chip.
+ *
+ * The same pill keeps its hover everywhere the link works: tables, forms and
+ * free HTML.
+ */
+.fi-dropdown-list-item a.fi-badge,
+.fi-select-input-value-badges-ctn a.fi-badge,
+.fi-select-input-value-label a.fi-badge {
+    pointer-events: none;
+    text-decoration: none !important;
+}
+
+.fi-dropdown-list-item .fi-pill-link:hover,
+.fi-dropdown-list-item .fi-pill-link:active,
+.fi-dropdown-list-item .fi-pill-link:focus-visible,
+.fi-select-input-value-badges-ctn .fi-pill-link:hover,
+.fi-select-input-value-badges-ctn .fi-pill-link:active,
+.fi-select-input-value-label .fi-pill-link:hover,
+.fi-select-input-value-label .fi-pill-link:active {
+    filter: none;
+    outline-color: transparent;
+}

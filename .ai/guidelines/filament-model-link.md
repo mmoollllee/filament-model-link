@@ -52,7 +52,11 @@ ModelLinkColumn::make('post.title')->viewTypes(['view']);
 // Ancestors that already appear in another pill chain are de-duplicated.
 // State is rebuilt as a comma-joined label list for search/sort.
 ModelLinkColumn::make('links')
-    ->relationships(['authors', 'posts', 'comments']);
+    ->relationships(['authors', 'posts', 'comments'])
+    ->maxPills(8); // remainder collapses into a "+N" pill
+
+// To-many references need no special mode — one pill chain per entry.
+ModelLinkColumn::make('tags.name')->label('Tags');
 ```
 
 ### Use in forms / modals
@@ -62,6 +66,19 @@ use Mmoollllee\FilamentModelLink\Forms\Components\ModelLink;
 
 ModelLink::make('team.name')->label('Team');
 ModelLink::make('author.name')->label('Author');
+
+// To-many references render one pill chain per related model.
+ModelLink::make('tags.name')->label('Tags')->maxPills(6);
+
+// Multi-relation mode — parity with ModelLinkColumn.
+ModelLink::make('links')->relationships(['authors', 'posts']);
+```
+
+Rendering any iterable of models outside a component goes through the
+presenter directly:
+
+```php
+ModelReferencePresenter::renderPillChains($post->tags, maxPills: 6);
 ```
 
 ### Use the Pill builder (one-off custom pills)
@@ -165,10 +182,33 @@ explicit `viewTypes(['view'])` to force read-only links.
 - **Selects must opt into HTML.** `modelSelectOptions()` / `enumSelectOptions()`
   return raw HTML strings; pair them with `->allowHtml()` or `->native(false)`
   on the `Select`. Without it Filament will escape the pill markup.
+- **Pills in a `->multiple()` Select need the package stylesheet.** Filament's
+  select.js wraps every selected value in an `fi-color-primary` badge
+  (`createBadgeElement`), so the pill sits inside a badge. No PHP hook avoids
+  it: the badge label comes from the loaded options array, and
+  `getOptionLabelsUsing()` is only consulted for values missing from it. The
+  package ships CSS that flattens that wrapper — import
+  `vendor/mmoollllee/filament-model-link/resources/css/filament-model-link.css`
+  in the panel theme. Also set `->native(false)`; a native `<select>` cannot
+  render HTML options.
+- **Single vs. multiple select.** In a `->multiple()` select Filament wraps every
+  selected value in its own badge — with `options()` just as much, since
+  select.js seeds its label repository from that array. Build options with
+  `options()` / `getSearchResultsUsing()`, leave `getOptionLabelFromRecordUsing()`
+  alone, and import the stylesheet.
+  A single select has no such wrapper — there
+  `->getOptionLabelFromRecordUsing()` is the right tool on a `->relationship()`
+  select, because it also labels the selected value, which is what you want.
+- **The stylesheet is required, not just for selects.** Pill chains get their
+  geometry (flat inner edges, rounded outer, gap between chains) from
+  `.fi-pill-chain` / `.fi-pill-chains` in the package CSS, not from classes in
+  the markup — a package cannot emit Tailwind utilities, because its PHP sits in
+  the consumer's `vendor/`, which their Tailwind build does not scan. Without
+  the import, chains render as separate fully rounded pills.
 - **Cell click swallowing the pill link.** `ModelLinkColumn` already calls
   `->disabledClick()` for this reason. Don't override it.
 - **Cycles in `pillParent()`** are bounded by `pill_chain_max_depth` (default
-  5). If your chain genuinely needs more, raise that config; don't disable
+  4). If your chain genuinely needs more, raise that config; don't disable
   the cap.
 - **Models without `HasPills`** fall back to class basename + the configured
   `default_color`. Implement `HasPills` to get a proper label and color.

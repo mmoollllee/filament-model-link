@@ -21,6 +21,10 @@ use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
  * pill chains for every record across the listed relationships. Models that
  * appear as ancestors of others in the same set are de-duplicated.
  *
+ * A reference that resolves to a collection (to-many relation) renders one
+ * chain per entry automatically; `maxPills()` caps the rendered chains with a
+ * "+N" overflow pill.
+ *
  * Click-through is disabled on the cell so the embedded `<a>` inside the pill
  * stays clickable.
  */
@@ -37,6 +41,8 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
 
     /** @var string[]|null */
     protected ?array $relationships = null;
+
+    protected ?int $maxPills = null;
 
     protected ?Closure $relatedTooltipResolver = null;
 
@@ -100,6 +106,19 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
     }
 
     /**
+     * Cap the number of pill chains rendered per cell; the remainder collapses
+     * into a "+N" overflow pill listing the hidden labels in its title.
+     * Applies to multi-relation mode and to-many references; a to-one
+     * reference is unaffected.
+     */
+    public function maxPills(?int $maxPills): static
+    {
+        $this->maxPills = $maxPills;
+
+        return $this;
+    }
+
+    /**
      * Tooltip closure receiving the *resolved related model* (not the column
      * state). Removes the boilerplate of fishing the related model out of
      * `$record` by hand:
@@ -154,12 +173,20 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
 
         $related = $this->resolveRelatedRecord($record);
 
-        if (! $related) {
-            $placeholder = $this->getPlaceholder();
+        // A to-many relation resolves to a collection — render one chain per
+        // entry instead of feeding the collection to renderPillChain().
+        if (is_iterable($related)) {
+            $html = ModelReferencePresenter::renderPillChains(
+                $related,
+                labelLimit: $this->getCharacterLimit() ?? 25,
+                maxPills: $this->maxPills,
+            );
 
-            return $placeholder
-                ? '<div class="text-sm text-gray-400 dark:text-gray-500">'.e($placeholder).'</div>'
-                : '';
+            return $html !== '' ? $html : $this->renderPlaceholder();
+        }
+
+        if (! $related) {
+            return $this->renderPlaceholder();
         }
 
         $url = $this->buildUrl($record);
@@ -172,6 +199,18 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
         return '<div'.$tooltipAttr.'>'.ModelReferencePresenter::renderPillChain($related, $url, $this->getCharacterLimit()).'</div>';
     }
 
+    protected function renderPlaceholder(): string
+    {
+        $placeholder = $this->getPlaceholder();
+
+        // Hook class only — `text-sm text-gray-400 dark:text-gray-500` used to
+        // sit here and never rendered: those utilities come from this package
+        // under vendor/, which a consumer's Tailwind build does not scan.
+        return $placeholder
+            ? '<div class="fi-pill-placeholder">'.e($placeholder).'</div>'
+            : '';
+    }
+
     // ── Multi-Relation Rendering ──
 
     protected function renderMultiRelations(): string
@@ -182,39 +221,20 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
             return '';
         }
 
+        // Wrap to-one results so Collection::merge() treats them as models
+        // instead of flattening them into their attribute arrays.
         $items = collect();
         foreach ($this->relationships as $rel) {
-            $items = $items->merge($record->{$rel});
+            $related = $record->{$rel} ?? null;
+            $items = $items->merge(is_iterable($related) ? $related : [$related]);
         }
 
-        if ($items->isEmpty()) {
-            return '';
-        }
-
-        // Collect models that already appear as a chain ancestor elsewhere;
-        // skip them as standalone/chain targets to avoid rendering the same
-        // entity twice (e.g. a team once as its own pill, once as a post's prefix).
-        $ancestors = [];
-        foreach ($items as $model) {
-            $chain = ModelReferencePresenter::pillChainModels($model);
-            array_pop($chain);
-            foreach ($chain as $a) {
-                $ancestors[$a::class.':'.$a->getKey()] = true;
-            }
-        }
-
-        $html = '<div class="flex flex-wrap gap-1.5">';
-        foreach ($items as $model) {
-            $key = $model::class.':'.$model->getKey();
-            if (isset($ancestors[$key])) {
-                continue;
-            }
-
-            $html .= ModelReferencePresenter::renderPillChain($model, labelLimit: $this->getCharacterLimit() ?? 25);
-        }
-        $html .= '</div>';
-
-        return $html;
+        // De-duplication (exact + ancestor) happens inside renderPillChains().
+        return ModelReferencePresenter::renderPillChains(
+            $items,
+            labelLimit: $this->getCharacterLimit() ?? 25,
+            maxPills: $this->maxPills,
+        );
     }
 
     // ── Internal ──

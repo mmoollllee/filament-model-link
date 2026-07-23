@@ -26,6 +26,12 @@ class FilamentModelLinkServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../.ai/guidelines/filament-model-link.md' => base_path('.ai/guidelines/filament-model-link.md'),
             ], 'filament-model-link-ai-guidelines');
+
+            // Optional: only needed by projects that prefer a local copy over
+            // importing the file straight out of vendor/ in their panel theme.
+            $this->publishes([
+                __DIR__.'/../resources/css/filament-model-link.css' => resource_path('css/vendor/filament-model-link.css'),
+            ], 'filament-model-link-styles');
         }
     }
 }

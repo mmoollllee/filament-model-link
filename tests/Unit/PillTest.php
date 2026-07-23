@@ -41,7 +41,7 @@ it('overrides the label', function (): void {
         ->not->toContain('Default');
 });
 
-it('overrides the icon with a tooltip title attribute', function (): void {
+it('emits no icon span when the icon does not render', function (): void {
     $model = PillModel::fake(['name' => 'X']);
 
     $html = Pill::for($model)
@@ -49,9 +49,14 @@ it('overrides the icon with a tooltip title attribute', function (): void {
         ->iconTooltip('Featured')
         ->toHtml();
 
-    // Icon rendering itself depends on blade-ui-kit/blade-heroicons being installed
-    // in the host — but the override path produces the tooltip wrapper unconditionally.
-    expect($html)->toContain('title="Featured"');
+    // The tooltip hangs on the icon span, so it exists only when an icon
+    // actually rendered. Icon rendering needs blade-ui-kit/blade-heroicons,
+    // which the package's own test environment does not install — so here the
+    // span is correctly absent. Emitting it anyway (the old behaviour) put a
+    // tooltip on a zero-width box nobody can hover, and cost a column gap.
+    expect($html)
+        ->not->toContain('title="Featured"')
+        ->not->toContain('fi-pill-icon');
 });
 
 it('renders a link when an explicit URL is given', function (): void {
@@ -61,16 +66,20 @@ it('renders a link when an explicit URL is given', function (): void {
 
     expect($html)
         ->toContain('<a href="https://example.test/x"')
-        ->toContain('hover:underline');
+        ->toContain('fi-pill-link');
 });
 
-it('keeps the tooltip on the fallback icon when no icon is supplied', function (): void {
+it('hangs no tooltip when there is no icon to hang it on', function (): void {
     $model = PillModel::fake(['name' => 'X']);
 
-    // icon() omitted → default model icon, but the tooltip must still attach.
+    // icon() omitted → the model's default icon carries the tooltip. With no
+    // icon resolver registered and no heroicons package there is no icon, so
+    // there is nothing to hang it on — and no empty span either.
     $html = Pill::for($model)->iconTooltip('Admin')->toHtml();
 
-    expect($html)->toContain('title="Admin"');
+    expect($html)
+        ->not->toContain('fi-pill-icon')
+        ->toContain('fi-badge');
 });
 
 it('keeps an explicit URL when combined with an icon override', function (): void {
