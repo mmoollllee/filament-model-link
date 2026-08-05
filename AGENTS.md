@@ -34,6 +34,7 @@ Three abstraction levels — pick the lowest that fits the call site:
 | Value pill without a model (date, counter, status) | `Pill::make('01.08.2026')->color('danger')->icon(...)->url(...)` |
 | Per-record status color on a model pill | `Pill::for($m)->color('danger')` (chain: only the target recolors) |
 | Tooltip should show *related-model* data | `->relatedTooltip(fn ($related) => …)` |
+| Cell should edit its links without losing pill navigation | `ModelLinkColumn::make()->action(Action::make(…))` |
 | Pill needs a record-specific icon (e.g. user with role icon) | `Pill::for($m)->icon(...)->iconTooltip(...)->toHtml()` |
 | `Select::options()` populated with model pills | `ModelReferencePresenter::modelSelectOptions(...)` + `->allowHtml()` |
 | Single Select with pill options | `modelSelectOptions()` + `->allowHtml()` |
@@ -111,7 +112,11 @@ Alternative: panel-scoped via `Filament::registerPlugin(FilamentModelLinkPlugin:
 - **`HasPillParent` is visual context, not authorization.** Authorization is
   checked per pill against the resource policy.
 - **`->disabledClick()` on `ModelLinkColumn` is non-negotiable** — already set
-  in `setUp()`. Without it, the cell click swallows the embedded `<a>`.
+  in `setUp()`. Without it, the cell click swallows the embedded `<a>`. The one
+  exception is built in: `->action()` re-enables click-through and marks the
+  pills with `x-on:click.stop`, so a pill click navigates while the rest of the
+  cell opens the action. Never pass `stopClickPropagation: true` to the
+  presenter for pills inside a select dropdown — Filament needs that click.
 - **`Select::options(modelSelectOptions(...))`** requires `->allowHtml()` (or
   `->native(false)`) on the Select. Without it the pill markup is escaped.
 - **Tests should `FilamentModelLink::flush()`** in a `beforeEach()` — the

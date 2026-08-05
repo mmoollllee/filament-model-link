@@ -260,6 +260,29 @@ which also accepts any iterable of models directly:
 ModelReferencePresenter::renderPillChains($post->tags, maxPills: 6);
 ```
 
+### B2) Editable cell — pills stay navigable
+
+A cell `action()` normally swallows the pill links: Filament wraps a column
+that has one in a button carrying `wire:click.prevent.stop`. `ModelLinkColumn`
+handles that for you — adding an action re-enables click-through and marks the
+pills so they stop the click themselves:
+
+```php
+ModelLinkColumn::make('links')
+    ->relationships(['authors', 'posts'])
+    ->action(
+        Action::make('editLinks')
+            ->schema([Select::make('links')->multiple()->options(…)])
+            ->fillForm(fn ($record) => ['links' => …])
+            ->action(fn ($record, array $data) => …),
+    );
+```
+
+Clicking a pill navigates to that record, clicking anywhere else in the cell
+opens the action. Do not set this up by hand elsewhere: the underlying
+`stopClickPropagation:` flag on `renderPillChain(s)` / `renderStandalonePill()`
+must stay off inside select dropdowns, where the click has to reach Filament.
+
 ### C) Pill chain in plain Blade
 
 ```php

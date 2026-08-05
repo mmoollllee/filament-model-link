@@ -5,6 +5,21 @@ All notable changes to `mmoollllee/filament-model-link` will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-08-05
+
+### Added
+
+- **Editable `ModelLinkColumn` cells.** `->action()` on the column now
+  re-enables the cell click that `setUp()` disables, and renders every linked
+  pill with `x-on:click.stop`. Clicking a pill navigates to that record as
+  before; clicking anywhere else in the cell opens the action — previously the
+  wrapper's `wire:click.prevent.stop` cancelled the pill's navigation, so the
+  two were mutually exclusive.
+- **`stopClickPropagation:` on `renderStandalonePill()`, `renderPillChain()`
+  and `renderPillChains()`** — the opt-in behind the above. Off by default,
+  and it must stay off for pills inside a select dropdown, where the click has
+  to reach Filament's own handler to pick the option.
+
 ## [0.2.0] — 2026-07-23
 
 ### Added

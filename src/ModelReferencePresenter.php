@@ -243,12 +243,15 @@ class ModelReferencePresenter
      * Use this when the caller provides no surrounding badge of its own
      * (tables, form display components, free HTML, single-select dropdowns).
      * $color overrides the model's HasPills color — e.g. a per-record status.
+     *
+     * $stopClickPropagation: see [self::wrapInBadge()] — set it when the pill
+     * sits inside a clickable cell, never inside a select dropdown.
      */
-    public static function renderStandalonePill(mixed $model, string $label, ?string $url = null, ?string $color = null): string
+    public static function renderStandalonePill(mixed $model, string $label, ?string $url = null, ?string $color = null, bool $stopClickPropagation = false): string
     {
         $classes = self::badgeClasses(filled($color) ? $color : self::pillColor($model));
 
-        return self::wrapInBadge($classes, self::iconHtml($model).e($label), $url);
+        return self::wrapInBadge($classes, self::iconHtml($model).e($label), $url, $stopClickPropagation);
     }
 
     /**
@@ -329,6 +332,9 @@ class ModelReferencePresenter
      * $ancestorLabelLimit truncates every ancestor label (default from config).
      * Ancestors are truncated by default to keep the combined chip compact —
      * full names remain reachable via the ancestor's link.
+     *
+     * $stopClickPropagation: see [self::wrapInBadge()] — set it when the chain
+     * sits inside a clickable cell, never inside a select dropdown.
      */
     public static function renderPillChain(
         Model $related,
@@ -336,6 +342,7 @@ class ModelReferencePresenter
         ?int $labelLimit = null,
         ?int $ancestorLabelLimit = null,
         ?string $targetColor = null,
+        bool $stopClickPropagation = false,
     ): string {
         $ancestorLabelLimit ??= (int) (config('filament-model-link.ancestor_label_limit') ?? 20);
 
@@ -347,7 +354,7 @@ class ModelReferencePresenter
         }
 
         if (count($chain) === 1) {
-            return self::renderStandalonePill($chain[0], $targetLabel, $url ?? self::urlForRelated($chain[0]), $targetColor);
+            return self::renderStandalonePill($chain[0], $targetLabel, $url ?? self::urlForRelated($chain[0]), $targetColor, $stopClickPropagation);
         }
 
         $segments = [];
@@ -359,7 +366,7 @@ class ModelReferencePresenter
 
             $segmentUrl = ($isTarget && $url !== null) ? $url : self::urlForRelated($model);
 
-            $segments[] = self::renderStandalonePill($model, $label, $segmentUrl, $isTarget ? $targetColor : null);
+            $segments[] = self::renderStandalonePill($model, $label, $segmentUrl, $isTarget ? $targetColor : null, $stopClickPropagation);
         }
 
         // Hook class only — the layout lives in the package stylesheet. Tailwind
@@ -387,12 +394,16 @@ class ModelReferencePresenter
      * types — pass individually rendered chains when per-call view types are
      * required.
      *
+     * $stopClickPropagation: see [self::wrapInBadge()] — set it when the chains
+     * sit inside a clickable cell, never inside a select dropdown.
+     *
      * @param  iterable<int, mixed>  $models
      */
     public static function renderPillChains(
         iterable $models,
         ?int $labelLimit = null,
         ?int $maxPills = null,
+        bool $stopClickPropagation = false,
     ): string {
         $unique = [];
         foreach ($models as $model) {
@@ -440,7 +451,7 @@ class ModelReferencePresenter
         // Hook class only — see renderPillChain() on why no Tailwind here.
         $html = '<div class="fi-pill-chains">';
         foreach ($targets as $model) {
-            $html .= self::renderPillChain($model, labelLimit: $labelLimit);
+            $html .= self::renderPillChain($model, labelLimit: $labelLimit, stopClickPropagation: $stopClickPropagation);
         }
 
         if ($overflow !== []) {
@@ -785,8 +796,15 @@ class ModelReferencePresenter
     /**
      * Wrap pill inner-HTML in a badge `<span>`, or an `<a>` when a safe URL is
      * given. Centralizes the badge markup so the link/span shape stays in sync.
+     *
+     * $stopClickPropagation keeps the link navigable inside a clickable cell:
+     * Filament wraps a column that has an action in a button carrying
+     * `wire:click.prevent.stop`, whose `preventDefault()` would otherwise
+     * cancel the anchor's navigation. It is opt-in because in a Filament
+     * select the click MUST reach the dropdown's own handler — stopping it
+     * there would navigate away instead of picking the option.
      */
-    protected static function wrapInBadge(string $classes, string $inner, ?string $url): string
+    protected static function wrapInBadge(string $classes, string $inner, ?string $url, bool $stopClickPropagation = false): string
     {
         $href = self::safeHref($url);
 
@@ -794,7 +812,9 @@ class ModelReferencePresenter
             // `fi-pill-link` marks a pill whose href is real, so the stylesheet
             // can give it hover feedback — and withhold it where Filament
             // intercepts the click (dropdown options).
-            return '<a href="'.e($href).'" class="'.$classes.' fi-pill-link">'.$inner.'</a>';
+            $stop = $stopClickPropagation ? ' x-on:click.stop' : '';
+
+            return '<a href="'.e($href).'"'.$stop.' class="'.$classes.' fi-pill-link">'.$inner.'</a>';
         }
 
         return '<span class="'.$classes.'">'.$inner.'</span>';

@@ -206,7 +206,11 @@ explicit `viewTypes(['view'])` to force read-only links.
   the consumer's `vendor/`, which their Tailwind build does not scan. Without
   the import, chains render as separate fully rounded pills.
 - **Cell click swallowing the pill link.** `ModelLinkColumn` already calls
-  `->disabledClick()` for this reason. Don't override it.
+  `->disabledClick()` for this reason. Don't override it by hand — give the
+  column an `->action()` instead: that re-enables click-through and marks the
+  pills with `x-on:click.stop`, so a pill click navigates and the rest of the
+  cell opens the action. The presenter's `stopClickPropagation:` flag exists
+  for that path only; inside a select dropdown the click must reach Filament.
 - **Cycles in `pillParent()`** are bounded by `pill_chain_max_depth` (default
   4). If your chain genuinely needs more, raise that config; don't disable
   the cap.

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mmoollllee\FilamentModelLink\Tables\Columns;
 
 use Closure;
+use Filament\Actions\Action;
 use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Tables\Columns\TextColumn;
 use Illuminate\Database\Eloquent\Model;
@@ -26,7 +27,8 @@ use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
  * "+N" overflow pill.
  *
  * Click-through is disabled on the cell so the embedded `<a>` inside the pill
- * stays clickable.
+ * stays clickable — unless the column gets a cell `action()`, which re-enables
+ * it and lets the pills stop the click themselves (see `action()`).
  */
 class ModelLinkColumn extends TextColumn implements HasEmbeddedView
 {
@@ -133,6 +135,18 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
         return $this;
     }
 
+    /**
+     * A cell action makes Filament wrap the whole cell in a
+     * `wire:click.prevent.stop` button, which `initialize()` suppresses via
+     * `disabledClick()` so the embedded `<a>` keeps working. Re-enable the
+     * click here and let the pills stop it themselves instead — clicking a
+     * pill navigates, clicking anywhere else in the cell runs the action.
+     */
+    public function action(Closure|Action|string|null $action): static
+    {
+        return parent::action($action)->disabledClick($action === null);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -145,7 +159,10 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
             ->state(fn ($record): ?string => ModelReferencePresenter::displayLabel($record, $this->referenceName()))
             ->limit(25)
             ->separator('')
-            ->disabledClick();
+            // Keep an already configured cell action working: `overwriteName()`
+            // re-runs this method, and an unconditional `disabledClick()` would
+            // silently undo what `action()` set, depending on call order.
+            ->disabledClick($this->getAction() === null);
 
         return $this;
     }
@@ -180,6 +197,7 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
                 $related,
                 labelLimit: $this->getCharacterLimit() ?? 25,
                 maxPills: $this->maxPills,
+                stopClickPropagation: $this->shouldStopPillClickPropagation(),
             );
 
             return $html !== '' ? $html : $this->renderPlaceholder();
@@ -196,7 +214,12 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
             ? ' x-tooltip="{ content: '.e(json_encode($tooltip) ?: '""').', theme: $store.theme }"'
             : '';
 
-        return '<div'.$tooltipAttr.'>'.ModelReferencePresenter::renderPillChain($related, $url, $this->getCharacterLimit()).'</div>';
+        return '<div'.$tooltipAttr.'>'.ModelReferencePresenter::renderPillChain(
+            $related,
+            $url,
+            $this->getCharacterLimit(),
+            stopClickPropagation: $this->shouldStopPillClickPropagation(),
+        ).'</div>';
     }
 
     protected function renderPlaceholder(): string
@@ -234,10 +257,20 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
             $items,
             labelLimit: $this->getCharacterLimit() ?? 25,
             maxPills: $this->maxPills,
+            stopClickPropagation: $this->shouldStopPillClickPropagation(),
         );
     }
 
     // ── Internal ──
+
+    /**
+     * Only a cell that actually reacts to clicks needs the pills to stop them:
+     * a plain (or click-disabled) cell leaves the anchor alone anyway.
+     */
+    protected function shouldStopPillClickPropagation(): bool
+    {
+        return $this->getAction() !== null && ! $this->isClickDisabled();
+    }
 
     protected function resolveTooltip(mixed $related): mixed
     {
