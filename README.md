@@ -279,7 +279,8 @@ ModelLinkColumn::make('links')
 ```
 
 Clicking a pill navigates to that record, clicking anywhere else in the cell
-opens the action.
+opens the action. Through the builder the same opt-in reads
+`Pill::for($m)->linked()->clickthrough()`.
 
 The same flag covers pills used as the *selected values* of a select — an
 inline multi-select cell, for instance. Selected values normally get

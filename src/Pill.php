@@ -38,6 +38,8 @@ final class Pill implements Htmlable
 
     protected bool $chain = false;
 
+    protected bool $clickthrough = false;
+
     protected ?int $labelLimit = null;
 
     protected ?int $ancestorLabelLimit = null;
@@ -142,6 +144,22 @@ final class Pill implements Htmlable
         return $this;
     }
 
+    /**
+     * Keep this pill's link usable inside a control that would otherwise
+     * swallow the click — a clickable table cell, or a select where the pill is
+     * a selected value. The pill stops the click before that control sees it,
+     * and the stylesheet keeps its pointer events (`fi-pill-clickthrough`).
+     *
+     * Inside a dropdown list the pill stays inert either way: there the click
+     * has to reach Filament, or the option is never picked.
+     */
+    public function clickthrough(bool $condition = true): self
+    {
+        $this->clickthrough = $condition;
+
+        return $this;
+    }
+
     public function labelLimit(?int $limit): self
     {
         $this->labelLimit = $limit;
@@ -165,6 +183,7 @@ final class Pill implements Htmlable
                 icon: $this->iconOverride,
                 url: $this->url,
                 iconTooltip: $this->iconTooltip,
+                stopClickPropagation: $this->clickthrough,
             );
         }
 
@@ -179,6 +198,7 @@ final class Pill implements Htmlable
                 iconTooltip: $this->iconTooltip,
                 url: $url,
                 color: $this->color,
+                stopClickPropagation: $this->clickthrough,
             );
         }
 
@@ -189,6 +209,7 @@ final class Pill implements Htmlable
                 labelLimit: $this->labelLimit,
                 ancestorLabelLimit: $this->ancestorLabelLimit,
                 targetColor: $this->color,
+                stopClickPropagation: $this->clickthrough,
             );
         }
 
@@ -197,6 +218,7 @@ final class Pill implements Htmlable
             label: $this->resolveLabel(),
             url: $url,
             color: $this->color,
+            stopClickPropagation: $this->clickthrough,
         );
     }
 

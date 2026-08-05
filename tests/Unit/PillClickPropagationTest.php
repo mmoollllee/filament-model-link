@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Mmoollllee\FilamentModelLink\FilamentModelLink;
 use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
+use Mmoollllee\FilamentModelLink\Pill;
 use Mmoollllee\FilamentModelLink\Tables\Columns\ModelLinkColumn;
 use Mmoollllee\FilamentModelLink\Tests\Fixtures\PillModel;
 
@@ -71,4 +72,15 @@ it('keeps the cell click enabled when the column is re-initialized after the act
         ->overwriteName('owner');
 
     expect($column->isClickDisabled())->toBeFalse();
+});
+
+it('carries the flag through every Pill builder path', function (): void {
+    $model = PillModel::fake(['name' => 'Alpha'], id: 1);
+
+    // Each branch of Pill::toHtml() reaches a different presenter method.
+    expect(Pill::for($model)->url('/x')->clickthrough()->toHtml())->toContain('fi-pill-clickthrough')
+        ->and(Pill::for($model)->url('/x')->icon('heroicon-o-user')->clickthrough()->toHtml())->toContain('fi-pill-clickthrough')
+        ->and(Pill::chain($model)->url('/x')->clickthrough()->toHtml())->toContain('fi-pill-clickthrough')
+        ->and(Pill::make('Wert')->url('/x')->clickthrough()->toHtml())->toContain('fi-pill-clickthrough')
+        ->and(Pill::for($model)->url('/x')->toHtml())->not->toContain('fi-pill-clickthrough');
 });

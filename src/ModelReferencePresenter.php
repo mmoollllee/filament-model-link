@@ -230,10 +230,11 @@ class ModelReferencePresenter
         string|BackedEnum|null $icon = null,
         ?string $url = null,
         string $iconTooltip = '',
+        bool $stopClickPropagation = false,
     ): string {
         $classes = self::badgeClasses(filled($color) ? $color : self::defaultColor());
 
-        return self::wrapInBadge($classes, self::iconSpan(self::renderIcon($icon), $iconTooltip).e($label), $url);
+        return self::wrapInBadge($classes, self::iconSpan(self::renderIcon($icon), $iconTooltip).e($label), $url, $stopClickPropagation);
     }
 
     /**
@@ -268,6 +269,7 @@ class ModelReferencePresenter
         bool $linked = false,
         ?string $url = null,
         ?string $color = null,
+        bool $stopClickPropagation = false,
     ): string {
         $classes = self::badgeClasses(filled($color) ? $color : self::pillColor($model));
 
@@ -284,7 +286,7 @@ class ModelReferencePresenter
         // An explicit $url (e.g. from Pill::url()) wins; otherwise resolve when linked.
         $url ??= $linked ? self::urlForRelated($model) : null;
 
-        return self::wrapInBadge($classes, $inner, $url);
+        return self::wrapInBadge($classes, $inner, $url, $stopClickPropagation);
     }
 
     /**

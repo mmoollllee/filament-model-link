@@ -36,6 +36,7 @@ Three abstraction levels — pick the lowest that fits the call site:
 | Tooltip should show *related-model* data | `->relatedTooltip(fn ($related) => …)` |
 | Cell should edit its links without losing pill navigation | `ModelLinkColumn::make()->action(Action::make(…))` |
 | Pill needs a record-specific icon (e.g. user with role icon) | `Pill::for($m)->icon(...)->iconTooltip(...)->toHtml()` |
+| Selected value of a select should stay a working link | `Pill::…->clickthrough()` / `stopClickPropagation: true` |
 | `Select::options()` populated with model pills | `ModelReferencePresenter::modelSelectOptions(...)` + `->allowHtml()` |
 | Single Select with pill options | `modelSelectOptions()` + `->allowHtml()` |
 | `->multiple()` Select with pill options | `modelSelectOptions()` + `->allowHtml()` + `->native(false)` + **import the package stylesheet** |
