@@ -209,8 +209,11 @@ explicit `viewTypes(['view'])` to force read-only links.
   `->disabledClick()` for this reason. Don't override it by hand — give the
   column an `->action()` instead: that re-enables click-through and marks the
   pills with `x-on:click.stop`, so a pill click navigates and the rest of the
-  cell opens the action. The presenter's `stopClickPropagation:` flag exists
-  for that path only; inside a select dropdown the click must reach Filament.
+  cell opens the action. The flag also marks the pill `fi-pill-clickthrough`,
+  which lifts the stylesheet's `pointer-events: none` off a pill used as a
+  select's selected value — right for an editable cell, wrong for a form select
+  (clicking a chip would leave the form). Inside a dropdown list item the click
+  must reach Filament, and the suppression there is unconditional.
 - **Cycles in `pillParent()`** are bounded by `pill_chain_max_depth` (default
   4). If your chain genuinely needs more, raise that config; don't disable
   the cap.

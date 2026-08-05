@@ -13,15 +13,19 @@ it('leaves the click alone by default', function (): void {
     // Default matters most in select dropdowns: Filament has to receive the
     // click there, otherwise the option is never picked.
     expect(ModelReferencePresenter::renderStandalonePill($model, 'Alpha', '/x'))
-        ->not->toContain('x-on:click.stop');
+        ->not->toContain('x-on:click.stop')
+        ->not->toContain('fi-pill-clickthrough');
 });
 
 it('stops the click on linked pills when asked to', function (): void {
     $model = PillModel::fake(['name' => 'Alpha'], id: 1);
 
+    // The class is the stylesheet's half of the deal: it keeps the pill's
+    // pointer events inside a select's value container.
     expect(ModelReferencePresenter::renderStandalonePill($model, 'Alpha', '/x', stopClickPropagation: true))
         ->toContain('x-on:click.stop')
-        ->toContain('fi-pill-link');
+        ->toContain('fi-pill-link')
+        ->toContain('fi-pill-clickthrough');
 });
 
 it('does not stop the click on pills without a link', function (): void {

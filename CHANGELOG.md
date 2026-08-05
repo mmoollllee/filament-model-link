@@ -5,6 +5,19 @@ All notable changes to `mmoollllee/filament-model-link` will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-08-05
+
+### Fixed
+
+- **A pill used as a select's selected value can be clickable again.** The
+  stylesheet neutralises those pills (`pointer-events: none`), which also
+  swallowed the pills of an inline multi-select cell. `stopClickPropagation:
+  true` now marks the anchor `fi-pill-clickthrough`, and the stylesheet exempts
+  exactly those from the suppression — dropdown list items keep it
+  unconditionally, so the same label still selects as an option and navigates
+  as a chip. Selected values of a form select are unaffected: without the flag
+  they stay neutral, as before.
+
 ## [0.3.0] — 2026-08-05
 
 ### Added

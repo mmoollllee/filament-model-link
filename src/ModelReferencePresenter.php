@@ -812,9 +812,16 @@ class ModelReferencePresenter
             // `fi-pill-link` marks a pill whose href is real, so the stylesheet
             // can give it hover feedback — and withhold it where Filament
             // intercepts the click (dropdown options).
+            //
+            // `fi-pill-clickthrough` is the stylesheet's counterpart to the
+            // stop modifier: it keeps the pill's pointer events inside a
+            // select's value container, where they are neutralised by default.
+            // A dropdown list item suppresses them either way, so the same
+            // label can serve as a selectable option and as a navigable chip.
             $stop = $stopClickPropagation ? ' x-on:click.stop' : '';
+            $clickthrough = $stopClickPropagation ? ' fi-pill-clickthrough' : '';
 
-            return '<a href="'.e($href).'"'.$stop.' class="'.$classes.' fi-pill-link">'.$inner.'</a>';
+            return '<a href="'.e($href).'"'.$stop.' class="'.$classes.' fi-pill-link'.$clickthrough.'">'.$inner.'</a>';
         }
 
         return '<span class="'.$classes.'">'.$inner.'</span>';

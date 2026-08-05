@@ -279,9 +279,16 @@ ModelLinkColumn::make('links')
 ```
 
 Clicking a pill navigates to that record, clicking anywhere else in the cell
-opens the action. Do not set this up by hand elsewhere: the underlying
-`stopClickPropagation:` flag on `renderPillChain(s)` / `renderStandalonePill()`
-must stay off inside select dropdowns, where the click has to reach Filament.
+opens the action.
+
+The same flag covers pills used as the *selected values* of a select — an
+inline multi-select cell, for instance. Selected values normally get
+`pointer-events: none` from the stylesheet (a live link inside the select's
+button navigates away mid-edit), and `stopClickPropagation: true` opts a pill
+back in by marking it `fi-pill-clickthrough`. Inside a dropdown list item the
+suppression is unconditional either way, so one label can serve as a selectable
+option and as a navigable chip. Keep the flag off for options of a form select,
+where clicking a chip should not leave the form.
 
 ### C) Pill chain in plain Blade
 

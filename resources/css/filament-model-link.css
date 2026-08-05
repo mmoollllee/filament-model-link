@@ -251,10 +251,18 @@
  *
  * The same pill keeps its hover everywhere the link works: tables, forms and
  * free HTML.
+ *
+ * `.fi-pill-clickthrough` opts a selected value back in — the presenter sets it
+ * together with `x-on:click.stop`, so such a pill halts the click before the
+ * select sees it and navigates instead. That is what an editable table cell
+ * needs: the chip is the pill it replaced. Inside a dropdown list item the
+ * suppression stays unconditional — the click has to reach Filament's option
+ * handler, and a dead anchor is exactly what lets it through, so one label can
+ * serve as both a selectable option and a navigable chip.
  */
 .fi-dropdown-list-item a.fi-badge,
-.fi-select-input-value-badges-ctn a.fi-badge,
-.fi-select-input-value-label a.fi-badge {
+.fi-select-input-value-badges-ctn a.fi-badge:not(.fi-pill-clickthrough),
+.fi-select-input-value-label a.fi-badge:not(.fi-pill-clickthrough) {
     pointer-events: none;
     text-decoration: none !important;
 }
@@ -262,10 +270,10 @@
 .fi-dropdown-list-item .fi-pill-link:hover,
 .fi-dropdown-list-item .fi-pill-link:active,
 .fi-dropdown-list-item .fi-pill-link:focus-visible,
-.fi-select-input-value-badges-ctn .fi-pill-link:hover,
-.fi-select-input-value-badges-ctn .fi-pill-link:active,
-.fi-select-input-value-label .fi-pill-link:hover,
-.fi-select-input-value-label .fi-pill-link:active {
+.fi-select-input-value-badges-ctn .fi-pill-link:not(.fi-pill-clickthrough):hover,
+.fi-select-input-value-badges-ctn .fi-pill-link:not(.fi-pill-clickthrough):active,
+.fi-select-input-value-label .fi-pill-link:not(.fi-pill-clickthrough):hover,
+.fi-select-input-value-label .fi-pill-link:not(.fi-pill-clickthrough):active {
     filter: none;
     outline-color: transparent;
 }

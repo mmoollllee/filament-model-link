@@ -115,8 +115,11 @@ Alternative: panel-scoped via `Filament::registerPlugin(FilamentModelLinkPlugin:
   in `setUp()`. Without it, the cell click swallows the embedded `<a>`. The one
   exception is built in: `->action()` re-enables click-through and marks the
   pills with `x-on:click.stop`, so a pill click navigates while the rest of the
-  cell opens the action. Never pass `stopClickPropagation: true` to the
-  presenter for pills inside a select dropdown — Filament needs that click.
+  cell opens the action. The same flag also lifts the stylesheet's
+  `pointer-events: none` off a pill used as a select's selected value (via
+  `fi-pill-clickthrough`) — use it for an editable table cell, not for a form
+  select, where clicking a chip would leave the form. Dropdown options keep the
+  suppression unconditionally; Filament needs that click.
 - **`Select::options(modelSelectOptions(...))`** requires `->allowHtml()` (or
   `->native(false)`) on the Select. Without it the pill markup is escaped.
 - **Tests should `FilamentModelLink::flush()`** in a `beforeEach()` — the

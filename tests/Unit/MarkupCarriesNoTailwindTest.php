@@ -27,6 +27,7 @@ function pillMarkupSamples(): array
         'raw' => ModelReferencePresenter::renderPill('Roh', 'danger', url: '/x'),
         // The icon paths add their own wrapper span — cover them explicitly.
         'raw with icon' => ModelReferencePresenter::renderPill('Roh', icon: 'heroicon-o-user', iconTooltip: 'Rolle'),
+        'clickthrough' => ModelReferencePresenter::renderStandalonePill($parent, 'Parent', '/x', stopClickPropagation: true),
         'icon override' => ModelReferencePresenter::renderPillWithIconOverride($parent, 'heroicon-o-user', 'Parent', 'Rolle'),
     ];
 }
@@ -52,7 +53,7 @@ it('keeps every class the stylesheet targets present in the markup', function ()
 
     // Hooks the stylesheet owns and this package emits itself. Filament's own
     // classes (fi-badge, fi-dropdown-list-item, …) are deliberately not listed.
-    foreach (['fi-pill-chain', 'fi-pill-chains', 'fi-pill-link'] as $hook) {
+    foreach (['fi-pill-chain', 'fi-pill-chains', 'fi-pill-link', 'fi-pill-clickthrough'] as $hook) {
         expect($css)->toContain(".{$hook}")
             ->and($markup)->toContain($hook);
     }
