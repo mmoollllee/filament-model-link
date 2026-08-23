@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the options, the record-based chip label, `allowHtml()` and `native(false)`.
   Takes a collection or a closure (or nothing, on a `relationship()` select),
   the usual label controls, and `linked:` / `clickthrough:` opt-outs.
+- **The models closure runs through the component's evaluator**, so it takes
+  Filament's injections — `Get $get` to read a sibling field, `$record` to keep
+  the current value inside a filtered list.
 - **`renderUsing:` on `pillOptions()`** — for a pill the presenter cannot infer
   (a per-record icon, a project wrapper). It replaces the label/linked/
   clickthrough arguments and still feeds both label sources.

@@ -80,23 +80,34 @@ class PillSelect
             return $select;
         }
 
-        return $select->options(fn (): array => self::resolveModels($models)
-            ->mapWithKeys(fn (Model $model): array => [$model->getKey() => $render($model)])
-            ->all());
+        // The models closure runs through the component's own evaluator, so it
+        // can take Filament's injections — `Get $get` to read a sibling field,
+        // `$record` to keep the current value in a filtered list.
+        return $select->options(static fn (Select $component): array => self::resolveModels(
+            $models instanceof Closure ? $component->evaluate($models) : $models,
+        )->mapWithKeys(fn (Model $model): array => [$model->getKey() => $render($model)])->all());
     }
 
     /**
-     * @param  iterable<int, Model>|(Closure(): iterable<int, Model>)  $models
+     * Normalise whatever the caller (or their closure) handed over. `mixed` on
+     * purpose: the value may come straight out of `evaluate()`.
+     *
      * @return Collection<int, Model>
      */
-    protected static function resolveModels(iterable|Closure $models): Collection
+    protected static function resolveModels(mixed $models): Collection
     {
-        $resolved = $models instanceof Closure ? $models() : $models;
-
-        if ($resolved instanceof Collection) {
-            return $resolved;
+        if ($models instanceof Collection) {
+            return $models;
         }
 
-        return new Collection(is_array($resolved) ? $resolved : iterator_to_array($resolved));
+        if (is_array($models)) {
+            return new Collection($models);
+        }
+
+        if (! is_iterable($models)) {
+            throw new InvalidArgumentException('pillOptions() expects a collection, an array or a closure returning one.');
+        }
+
+        return new Collection(iterator_to_array($models));
     }
 }

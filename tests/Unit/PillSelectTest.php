@@ -99,3 +99,16 @@ it('takes a renderer for pill flavors the presenter cannot infer', function (): 
         ->toContain('fi-pill-clickthrough')
         ->toBe($select->getOptionLabelFromRecord($model));
 });
+
+it('runs the models closure through the component evaluator', function (): void {
+    $model = PillModel::fake(['name' => 'Alpha'], id: 1);
+
+    // A real options list is rarely static — it reads a sibling field or keeps
+    // the record's current value in a filtered list. Both need Filament's
+    // injections, so the closure goes through the component's evaluator.
+    $select = Select::make('author_id')->pillOptions(
+        fn (Select $component): array => $component->getName() === 'author_id' ? [$model] : [],
+    );
+
+    expect($select->getOptions())->toHaveKey(1);
+});

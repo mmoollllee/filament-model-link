@@ -343,8 +343,18 @@ label source — every pill click-through, so a **selected** value stays a link
 (in the dropdown the stylesheet keeps it inert either way, so the click still
 picks the option).
 
-It takes a collection or a closure, plus the same label controls as the static
-API, and can opt out of either behavior:
+It takes a collection or a closure — the closure runs through the component's
+evaluator, so it can read a sibling field or the current record:
+
+```php
+Select::make('cam_id')
+    ->pillOptions(fn (Get $get, ?Scene $record) => Cam::availableBetween($get('from'), $get('to'))
+        ->when($record?->cam, fn ($cams) => $cams->push($record->cam))
+    );
+```
+
+It takes the same label controls as the static API, and can opt out of either
+behavior:
 
 ```php
 Select::make('author_id')->pillOptions($authors, 'email');
