@@ -105,19 +105,38 @@ Pill::for($model)->url($explicitUrl)->toHtml();
 
 The Pill is `Htmlable`, so `{{ Pill::for($u) }}` works directly in Blade.
 
-### Static API (for Select options, plain text, advanced cases)
+### Pill selects (`Select::pillOptions()`)
+
+```php
+// Everything a pill select needs: options, chip labels, allowHtml(), native(false).
+Select::make('author_id')
+    ->pillOptions(fn () => Author::query()->orderBy('name')->get());
+
+// On a relationship select pass no models — Filament builds the options itself.
+Select::make('authors')
+    ->multiple()
+    ->relationship('authors', 'name')
+    ->pillOptions();
+
+// Label controls and opt-outs.
+Select::make('author_id')->pillOptions($authors, 'email');
+Select::make('author_id')->pillOptions($authors, labelCallback: fn (Author $a) => "{$a->name} ({$a->company})");
+Select::make('author_id')->pillOptions($authors, clickthrough: false);
+Select::make('author_id')->pillOptions($authors, linked: false);
+```
+
+Prefer the macro over wiring a select by hand: it sets BOTH label sources from
+one renderer, so the dropdown option and the selected chip cannot drift apart.
+
+### Static API (for plain text, filters, advanced cases)
 
 ```php
 use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
 
-// Pill-styled <option>s for a Filament Select. allowHtml() is required.
-Select::make('author_id')
-    ->allowHtml()
-    ->options(fn () => ModelReferencePresenter::modelSelectOptions(
-        Author::query()->orderBy('name')->get(),
-        labelAttribute: 'name',
-        linked: true,
-    ));
+// The macro's building blocks — for a SelectFilter, a custom search source, or
+// options that are not a model collection. Keep the flags identical on both.
+ModelReferencePresenter::modelSelectOptions($authors, linked: true, clickthrough: true);   // options array
+ModelReferencePresenter::modelSelectOption($author, linked: true, clickthrough: true);     // getOptionLabelFromRecordUsing
 
 // Pill-styled <option>s for an enum.
 Select::make('status')
@@ -191,11 +210,16 @@ explicit `viewTypes(['view'])` to force read-only links.
   `vendor/mmoollllee/filament-model-link/resources/css/filament-model-link.css`
   in the panel theme. Also set `->native(false)`; a native `<select>` cannot
   render HTML options.
-- **Single vs. multiple select.** In a `->multiple()` select Filament wraps every
-  selected value in its own badge — with `options()` just as much, since
-  select.js seeds its label repository from that array. Build options with
-  `options()` / `getSearchResultsUsing()`, leave `getOptionLabelFromRecordUsing()`
-  alone, and import the stylesheet.
+- **A selected value only stays a link with click-through.** The stylesheet
+  neutralises pill anchors inside a select's value container unless the pill
+  carries `fi-pill-clickthrough` (`clickthrough: true`, the macro's default).
+  In the dropdown the suppression is unconditional — the click has to reach
+  Filament's option handler.
+- **Both label sources or none.** select.js seeds its label repository from the
+  OPTIONS array and only asks the server (`getOptionLabelsUsing`, fed by
+  `getOptionLabelFromRecordUsing()`) for values missing from it. Render both
+  from the same helper — `pillOptions()` does — or a chip changes appearance
+  depending on where its label came from.
   A single select has no such wrapper — there
   `->getOptionLabelFromRecordUsing()` is the right tool on a `->relationship()`
   select, because it also labels the selected value, which is what you want.

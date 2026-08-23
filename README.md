@@ -24,7 +24,8 @@ only linked when the current user is authorized.
 | `ModelLinkColumn` | `TextColumn` replacement for related-model cells. Single-relation, to-many, multi-relation, `maxPills()` overflow, search/sort, related-tooltip. |
 | `ModelLink` | Filament form component that renders the same pill chains in a `Placeholder` — to-one, to-many, and multi-relation (`relationships()`), with `maxPills()` overflow. |
 | `Pill` | Fluent builder for one-off pills (`Pill::for($m)->icon(...)->linked()->toHtml()`), per-record colors (`->color('danger')`), and model-less value pills (`Pill::make('01.08.2026')`). Works in Blade via `Htmlable`. |
-| `ModelReferencePresenter` | Low-level static API: `renderStandalonePill`, `renderPillChain`, `renderPillChains`, `renderPill`, `textChain`, `modelSelectOptions`, `modelSelectLabels`, `enumSelectOptions`, `urlForRelated`, … |
+| `Select::pillOptions()` | Macro that turns a Filament `Select` into a pill select: options, chip labels, `allowHtml()`, `native(false)` — one call, both label sources in sync. |
+| `ModelReferencePresenter` | Low-level static API: `renderStandalonePill`, `renderPillChain`, `renderPillChains`, `renderPill`, `textChain`, `modelSelectOption(s)`, `modelSelectLabels`, `enumSelectOptions`, `urlForRelated`, … |
 | `FilamentModelLink` | Fluent configurator — wire every resolver in one chain. |
 | `FilamentModelLinkPlugin` | Optional Filament plugin wrapper for panel-scoped install. |
 | `HasPills` / `HasPillLabel` / `HasPillParent` | Three small contracts — only `HasPills` is required. |
@@ -332,62 +333,77 @@ Pill::for($invoice)->color($invoice->isOverdue() ? 'danger' : 'gray');
 ### E) Select / SelectFilter with pill options
 
 ```php
-use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
-
 Select::make('author_id')
-    ->allowHtml()  // required — pills are raw HTML
-    ->options(fn () => ModelReferencePresenter::modelSelectOptions(
-        Author::query()->orderBy('name')->get(),
-        linked: true,
-    ));
+    ->pillOptions(fn () => Author::query()->orderBy('name')->get());
+```
 
+`pillOptions()` is a macro on Filament's `Select` and wires the whole recipe:
+`allowHtml()`, `native(false)`, the options themselves, and the record-based
+label source — every pill click-through, so a **selected** value stays a link
+(in the dropdown the stylesheet keeps it inert either way, so the click still
+picks the option).
+
+It takes a collection or a closure, plus the same label controls as the static
+API, and can opt out of either behavior:
+
+```php
+Select::make('author_id')->pillOptions($authors, 'email');
+Select::make('author_id')->pillOptions($authors, labelCallback: fn (Author $a) => "{$a->name} ({$a->company})");
+Select::make('author_id')->pillOptions($authors, clickthrough: false);  // selected value stays inert
+Select::make('author_id')->pillOptions($authors, linked: false);        // plain pills, no <a>
+```
+
+On a `->relationship()` select, pass no models — Filament builds the options
+from the related records, and the macro renders each of them:
+
+```php
+Select::make('authors')
+    ->multiple()
+    ->relationship('authors', 'name')
+    ->pillOptions();
+```
+
+Enum pills have no link and no macro of their own:
+
+```php
 Select::make('status')
     ->allowHtml()
     ->options(fn () => ModelReferencePresenter::enumSelectOptions(PostStatus::class));
 ```
 
+> **Why one call sets two label sources.** Filament's `select.js` fills its
+> label repository from the OPTIONS array (`populateLabelRepositoryFromOptions`)
+> and only asks the server — `initialOptionLabel(s)`, `getOptionLabelUsing`,
+> `getOptionLabelsUsing`, i.e. what `getOptionLabelFromRecordUsing()` feeds — for
+> values the options do not carry, e.g. a selected record beyond a `limit()`.
+> Set only one of them and a chip silently changes appearance depending on where
+> its label came from. The macro sets both from the same renderer; by hand, use
+> `ModelReferencePresenter::modelSelectOption()` for the record callback and
+> `modelSelectOptions()` for the array — same markup, same flags.
+>
 > **`->multiple()` needs the package stylesheet.** Filament's select JS renders
 > every selected value through `createBadgeElement`, which hardcodes an
 > `fi-color-primary` badge around the option label — so a pill lands inside a
-> badge. And no PHP hook can prevent it: the badge label comes straight from the
-> loaded options array (select.js fills `labelRepository` from it and only falls
-> back to `getOptionLabelsUsing()` for values *missing* from it), so the dropdown
-> and the badge always share the same markup.
+> badge, and no PHP hook can prevent it. The fix is CSS, and the package ships
+> it — see [Theme setup](#theme-setup). It flattens the outer badge only when it
+> actually wraps a pill (`:has()`), so selects without pills keep Filament's
+> normal styling.
 >
-> The fix is CSS, and the package ships it — see [Theme setup](#theme-setup).
-> It flattens the outer badge only when it actually wraps a pill (`:has()`), so
-> selects without pills keep Filament's normal styling.
+> **The static API is still there** for cases the macro does not cover — a
+> `SelectFilter` (not a `Select`), a custom search source, or options built from
+> something other than a model collection:
 >
 > ```php
 > Select::make('authors')
 >     ->multiple()
->     ->relationship('authors', 'name')
->     ->allowHtml()      // pills are raw HTML
->     ->native(false)    // required: a native <select> cannot render them
->     ->options(fn () => ModelReferencePresenter::modelSelectOptions($authors, linked: true))
+>     ->allowHtml()
+>     ->native(false)
+>     ->options(fn () => ModelReferencePresenter::modelSelectOptions($authors, linked: true, clickthrough: true))
 >     ->getSearchResultsUsing(fn (string $search) => ModelReferencePresenter::modelSelectOptions(
 >         Author::search($search)->get(),
 >         linked: true,
+>         clickthrough: true,
 >     ));
-> ```
->
-> In a `->multiple()` select, avoid `->getOptionLabelFromRecordUsing()`. It
-> feeds Filament's `getOptionLabelsUsing()`, so it labels the selected values
-> too — and there each one lands inside Filament's own badge. Use `options()` /
-> `getSearchResultsUsing()`, which say what they do.
->
-> In a **single** select the opposite holds: there is no wrapper badge, the
-> selected value is rendered into `.fi-select-input-value-label` on its own, and
-> labelling it is exactly what you want. On a `->relationship()` select,
-> `->getOptionLabelFromRecordUsing()` is then the right tool — it keeps
-> `createOptionForm()` and the relationship's own query intact:
->
-> ```php
-> Select::make('author_id')
->     ->relationship('author', 'name')
->     ->getOptionLabelFromRecordUsing(fn (Author $record) => Pill::for($record)->toHtml())
->     ->allowHtml()
->     ->native(false);
 > ```
 >
 > Colour or icon that varies per record — a status, a kind — is not a job for

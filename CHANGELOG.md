@@ -5,6 +5,31 @@ All notable changes to `mmoollllee/filament-model-link` will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-08-23
+
+### Added
+
+- **`Select::pillOptions()`** — a macro that wires a pill select in one call:
+  the options, the record-based chip label, `allowHtml()` and `native(false)`.
+  Takes a collection or a closure (or nothing, on a `relationship()` select),
+  the usual label controls, and `linked:` / `clickthrough:` opt-outs.
+- **`clickthrough:` on `modelSelectOptions()`** and the new single-model
+  **`modelSelectOption()`** — the building blocks the macro uses, for a
+  `SelectFilter`, a custom search source, or options that are not a model
+  collection.
+
+### Why
+
+A linked pill went dead as soon as it became a select's SELECTED value: the
+stylesheet neutralises anchors there, and only a pill rendered with
+`stopClickPropagation: true` (`Pill::clickthrough()`) is exempt — which
+`modelSelectOptions()` could not produce at all. On top of that, which label
+source Filament reaches for is not the caller's choice: `select.js` fills its
+label repository from the OPTIONS array and only asks the server for values
+missing from it, so setting just one of the two sources makes a chip's
+appearance depend on where its label came from. The macro sets both from the
+same renderer.
+
 ## [0.3.2] — 2026-08-05
 
 ### Added

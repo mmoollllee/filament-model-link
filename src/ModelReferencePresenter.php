@@ -520,6 +520,12 @@ class ModelReferencePresenter
      * model's resource (resolved via `urlForRelated()`); options for models
      * without a resolvable URL silently fall back to plain pills.
      *
+     * Pass $clickthrough = true to keep those links usable once the option
+     * becomes a SELECTED value — without it the stylesheet neutralises the
+     * anchor there. Inside the open dropdown the pill stays inert either way,
+     * so the click still reaches Filament's option handler. `Select::pillOptions()`
+     * wires this (and `allowHtml()`) for you.
+     *
      * NOTE for `->multiple()` Selects: use this for the DROPDOWN only. Filament
      * wraps each selected value in its own chip, so returning a pill from
      * `getOptionLabelsUsing()` / `getOptionLabelFromRecordUsing()` renders a
@@ -533,13 +539,35 @@ class ModelReferencePresenter
         ?string $labelAttribute = null,
         ?callable $labelCallback = null,
         bool $linked = false,
+        bool $clickthrough = false,
     ): array {
-        return $models->mapWithKeys(function (Model $model) use ($labelAttribute, $labelCallback, $linked): array {
-            $label = self::selectLabelFor($model, $labelAttribute, $labelCallback);
-            $url = $linked ? self::urlForRelated($model) : null;
+        return $models->mapWithKeys(fn (Model $model): array => [
+            $model->getKey() => self::modelSelectOption($model, $labelAttribute, $labelCallback, $linked, $clickthrough),
+        ])->all();
+    }
 
-            return [$model->getKey() => self::renderStandalonePill($model, $label, $url)];
-        })->all();
+    /**
+     * One select option's markup — the single-model counterpart of
+     * `modelSelectOptions()`.
+     *
+     * Feed it to `getOptionLabelFromRecordUsing()` so a select's OPTIONS and its
+     * selected values cannot disagree: `select.js` fills its label repository
+     * from the options array and only asks the server for values missing from
+     * it, so both sources have to render the same pill.
+     */
+    public static function modelSelectOption(
+        Model $model,
+        ?string $labelAttribute = null,
+        ?callable $labelCallback = null,
+        bool $linked = false,
+        bool $clickthrough = false,
+    ): string {
+        return self::renderStandalonePill(
+            $model,
+            self::selectLabelFor($model, $labelAttribute, $labelCallback),
+            $linked ? self::urlForRelated($model) : null,
+            stopClickPropagation: $clickthrough,
+        );
     }
 
     /**
