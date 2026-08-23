@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the options, the record-based chip label, `allowHtml()` and `native(false)`.
   Takes a collection or a closure (or nothing, on a `relationship()` select),
   the usual label controls, and `linked:` / `clickthrough:` opt-outs.
+- **`renderUsing:` on `pillOptions()`** — for a pill the presenter cannot infer
+  (a per-record icon, a project wrapper). It replaces the label/linked/
+  clickthrough arguments and still feeds both label sources.
 - **`clickthrough:` on `modelSelectOptions()`** and the new single-model
   **`modelSelectOption()`** — the building blocks the macro uses, for a
   `SelectFilter`, a custom search source, or options that are not a model

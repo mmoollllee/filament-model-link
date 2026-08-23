@@ -353,6 +353,19 @@ Select::make('author_id')->pillOptions($authors, clickthrough: false);  // selec
 Select::make('author_id')->pillOptions($authors, linked: false);        // plain pills, no <a>
 ```
 
+For a pill the presenter cannot infer — a per-record icon, a wrapper of your own
+— pass `renderUsing`. It replaces the label/linked/clickthrough arguments and
+serves both label sources just the same:
+
+```php
+Select::make('author_id')->pillOptions($authors, renderUsing: fn (Author $a) => Pill::for($a)
+    ->icon($a->role?->icon)
+    ->label("{$a->name} ({$a->company})")
+    ->linked()
+    ->clickthrough()
+    ->toHtml());
+```
+
 On a `->relationship()` select, pass no models — Filament builds the options
 from the related records, and the macro renders each of them:
 

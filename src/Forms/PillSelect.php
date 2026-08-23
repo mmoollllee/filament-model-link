@@ -45,6 +45,10 @@ class PillSelect
      * @param  iterable<int, Model>|(Closure(): iterable<int, Model>)|null  $models  Options
      *                                                                               source. Pass null on a `relationship()` select — Filament then builds the
      *                                                                               options from the related records itself.
+     * @param  (Closure(Model): string)|null  $renderUsing  Renders a record's pill, for
+     *                                                      flavors the presenter cannot infer — a per-record icon, a wrapper of your
+     *                                                      own. Replaces the label/linked/clickthrough arguments and, like them,
+     *                                                      serves BOTH label sources.
      */
     public static function apply(
         Select $select,
@@ -53,31 +57,32 @@ class PillSelect
         ?Closure $labelCallback = null,
         bool $linked = true,
         bool $clickthrough = true,
+        ?Closure $renderUsing = null,
     ): Select {
-        $select
-            ->allowHtml()
-            ->native(false)
-            // Covers the relationship case and, on a limited options list, every
-            // selected record the options array does not contain.
-            ->getOptionLabelFromRecordUsing(fn (Model $record): string => ModelReferencePresenter::modelSelectOption(
+        $render = $renderUsing !== null
+            ? static fn (Model $record): string => (string) $renderUsing($record)
+            : static fn (Model $record): string => ModelReferencePresenter::modelSelectOption(
                 $record,
                 $labelAttribute,
                 $labelCallback,
                 $linked,
                 $clickthrough,
-            ));
+            );
+
+        $select
+            ->allowHtml()
+            ->native(false)
+            // Covers the relationship case and, on a limited options list, every
+            // selected record the options array does not contain.
+            ->getOptionLabelFromRecordUsing($render);
 
         if ($models === null) {
             return $select;
         }
 
-        return $select->options(fn (): array => ModelReferencePresenter::modelSelectOptions(
-            self::resolveModels($models),
-            $labelAttribute,
-            $labelCallback,
-            $linked,
-            $clickthrough,
-        ));
+        return $select->options(fn (): array => self::resolveModels($models)
+            ->mapWithKeys(fn (Model $model): array => [$model->getKey() => $render($model)])
+            ->all());
     }
 
     /**

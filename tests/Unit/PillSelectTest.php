@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Filament\Forms\Components\Select;
 use Mmoollllee\FilamentModelLink\FilamentModelLink;
 use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
+use Mmoollllee\FilamentModelLink\Pill;
 use Mmoollllee\FilamentModelLink\Tests\Fixtures\PillModel;
 
 beforeEach(function (): void {
@@ -76,4 +77,25 @@ it('adds the click-through flag to the presenter helpers', function (): void {
         ->toContain('fi-pill-clickthrough')
         ->and(ModelReferencePresenter::modelSelectOption($model, linked: true, clickthrough: true))
         ->toBe(ModelReferencePresenter::modelSelectOptions(collect([$model]), linked: true, clickthrough: true)[1]);
+});
+
+it('takes a renderer for pill flavors the presenter cannot infer', function (): void {
+    $model = PillModel::fake(['name' => 'Alpha'], id: 1);
+
+    // A per-record icon, a project wrapper — whatever it is, it has to reach
+    // both label sources, or the chip and the option disagree.
+    $select = Select::make('author_id')->pillOptions(
+        collect([$model]),
+        renderUsing: fn (PillModel $record): string => Pill::for($record)
+            ->icon('heroicon-o-star')
+            ->label('Custom '.$record->name)
+            ->linked()
+            ->clickthrough()
+            ->toHtml(),
+    );
+
+    expect($select->getOptions()[1])
+        ->toContain('Custom Alpha')
+        ->toContain('fi-pill-clickthrough')
+        ->toBe($select->getOptionLabelFromRecord($model));
 });

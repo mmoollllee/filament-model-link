@@ -59,6 +59,7 @@ class FilamentModelLinkServiceProvider extends ServiceProvider
             ?Closure $labelCallback = null,
             bool $linked = true,
             bool $clickthrough = true,
+            ?Closure $renderUsing = null,
         ): Select {
             return PillSelect::apply(
                 PillSelect::select($this),
@@ -67,6 +68,7 @@ class FilamentModelLinkServiceProvider extends ServiceProvider
                 $labelCallback,
                 $linked,
                 $clickthrough,
+                $renderUsing,
             );
         });
     }

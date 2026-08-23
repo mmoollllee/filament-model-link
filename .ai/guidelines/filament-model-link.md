@@ -123,6 +123,10 @@ Select::make('author_id')->pillOptions($authors, 'email');
 Select::make('author_id')->pillOptions($authors, labelCallback: fn (Author $a) => "{$a->name} ({$a->company})");
 Select::make('author_id')->pillOptions($authors, clickthrough: false);
 Select::make('author_id')->pillOptions($authors, linked: false);
+
+// A pill flavor the presenter cannot infer (per-record icon, project wrapper):
+Select::make('author_id')->pillOptions($authors, renderUsing: fn (Author $a) => Pill::for($a)
+    ->icon($a->role?->icon)->label($a->name)->linked()->clickthrough()->toHtml());
 ```
 
 Prefer the macro over wiring a select by hand: it sets BOTH label sources from
