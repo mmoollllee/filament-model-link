@@ -48,6 +48,9 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
 
     protected ?Closure $relatedTooltipResolver = null;
 
+    /** @var (Closure(Model): ?string)|null */
+    protected ?Closure $labelUsing = null;
+
     public function overwriteName(string $name): static
     {
         $this->overwriteName = $name;
@@ -96,7 +99,7 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
                 $related = $record->{$rel} ?? [];
                 foreach (is_iterable($related) ? $related : [$related] as $model) {
                     if ($model instanceof Model) {
-                        $labels[] = ModelReferencePresenter::basePillLabel($model);
+                        $labels[] = ModelReferencePresenter::pillLabelFor($model, $this->labelUsing);
                     }
                 }
             }
@@ -136,6 +139,26 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
     }
 
     /**
+     * Label every pill of the cell — ancestors in a chain included — with
+     * something else than its `HasPillLabel` label; return null to keep that.
+     * The column's search and sort text follows. For a list whose readers
+     * know the records by another name:
+     *
+     *     ModelLinkColumn::make('links')
+     *         ->relationships(['scene', 'tenant'])
+     *         // Staff know a project by its internal name, not its public one.
+     *         ->labelUsing(fn (Model $model): ?string => $model instanceof Tenant ? $model->name : null);
+     *
+     * @param  (Closure(Model): ?string)|null  $callback
+     */
+    public function labelUsing(?Closure $callback): static
+    {
+        $this->labelUsing = $callback;
+
+        return $this;
+    }
+
+    /**
      * A cell action makes Filament wrap the whole cell in a
      * `wire:click.prevent.stop` button, which `initialize()` suppresses via
      * `disabledClick()` so the embedded `<a>` keeps working. Re-enable the
@@ -156,7 +179,15 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
     protected function initialize(): static
     {
         $this
-            ->state(fn ($record): ?string => ModelReferencePresenter::displayLabel($record, $this->referenceName()))
+            ->state(function ($record): ?string {
+                // A custom label is the text the cell shows, so search and
+                // sort have to see it too.
+                if ($this->labelUsing !== null && ($related = $this->resolveRelatedRecord($record)) instanceof Model) {
+                    return ModelReferencePresenter::pillLabelFor($related, $this->labelUsing);
+                }
+
+                return ModelReferencePresenter::displayLabel($record, $this->referenceName());
+            })
             ->limit(25)
             ->separator('')
             // Keep an already configured cell action working: `overwriteName()`
@@ -198,6 +229,7 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
                 labelLimit: $this->getCharacterLimit() ?? 25,
                 maxPills: $this->maxPills,
                 stopClickPropagation: $this->shouldStopPillClickPropagation(),
+                labelUsing: $this->labelUsing,
             );
 
             return $html !== '' ? $html : $this->renderPlaceholder();
@@ -219,6 +251,7 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
             $url,
             $this->getCharacterLimit(),
             stopClickPropagation: $this->shouldStopPillClickPropagation(),
+            labelUsing: $this->labelUsing,
         ).'</div>';
     }
 
@@ -258,6 +291,7 @@ class ModelLinkColumn extends TextColumn implements HasEmbeddedView
             labelLimit: $this->getCharacterLimit() ?? 25,
             maxPills: $this->maxPills,
             stopClickPropagation: $this->shouldStopPillClickPropagation(),
+            labelUsing: $this->labelUsing,
         );
     }
 

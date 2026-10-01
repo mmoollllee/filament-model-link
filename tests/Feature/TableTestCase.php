@@ -67,6 +67,7 @@ abstract class TableTestCase extends Orchestra
             $table->id();
             $table->string('title');
             $table->json('tag_ids')->nullable();
+            $table->foreignId('featured_tag_id')->nullable();
         });
 
         Schema::create('tags', function (Blueprint $table): void {

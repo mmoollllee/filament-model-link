@@ -5,6 +5,19 @@ All notable changes to `mmoollllee/filament-model-link` will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-10-01
+
+### Added
+
+- **`labelUsing()` on `ModelLinkColumn` and `ModelLink`** — one list labels its
+  pills differently from everywhere else: staff by a project's internal name,
+  where customers see its public one. The callback receives each model and
+  returns a label, or null to keep its `HasPillLabel` label; it reaches every
+  segment of a chain, the overflow pill's list and the column's search and sort
+  text. The presenter's `renderPillChain()`, `renderPillChains()` and
+  `textChain()` take it as `labelUsing:`, and `ModelReferencePresenter::pillLabelFor()`
+  resolves one label the same way.
+
 ## [0.5.0] — 2026-10-01
 
 ### Added

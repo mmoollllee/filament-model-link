@@ -27,6 +27,7 @@ Three abstraction levels — pick the lowest that fits the call site:
 | Table column referencing `author.name`, `team.name`, etc. | `ModelLinkColumn::make()` |
 | Modal/Form placeholder referencing a related model | `ModelLink::make()` — to-many references render one pill per entry |
 | Cell needs many related models pilled at once | `ModelLinkColumn::make()->relationships([...])` |
+| One list labels its pills differently (internal names for staff) | `->labelUsing(fn (Model $m): ?string => …)` on `ModelLinkColumn` / `ModelLink` |
 | Form placeholder needs many related models pilled at once | `ModelLink::make()->relationships([...])` |
 | Too many pills — collapse the rest into `+N` | `->maxPills(6)` on either component |
 | Render an iterable of models as pills anywhere | `ModelReferencePresenter::renderPillChains($models)` |
@@ -149,6 +150,9 @@ Alternative: panel-scoped via `Filament::registerPlugin(FilamentModelLinkPlugin:
 
 - Writing inline HTML for "icon + label + link" in a Filament resource when
   this package already covers it. Use `ModelLinkColumn` / `ModelLink` / `Pill`.
+- Changing `HasPillLabel::pillLabel()` — or building pills by hand — because
+  one list should name its records differently. Pass `labelUsing()` to that
+  list's column instead; the label stays the same everywhere else.
 - Reading `$model->name` / `$model->title` for display when the model
   implements `HasPillLabel`. Always go through `basePillLabel()` /
   `renderPillChain()` so the override is respected.

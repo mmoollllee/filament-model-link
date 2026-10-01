@@ -57,6 +57,12 @@ ModelLinkColumn::make('links')
 
 // To-many references need no special mode — one pill chain per entry.
 ModelLinkColumn::make('tags.name')->label('Tags');
+
+// One list names its records differently (staff: a project's internal name).
+// Labels every pill, chain ancestors included; null keeps HasPillLabel's.
+ModelLinkColumn::make('links')
+    ->relationships(['scene', 'project'])
+    ->labelUsing(fn (Model $model): ?string => $model instanceof Project ? $model->internal_name : null);
 ```
 
 ### Use in forms / modals

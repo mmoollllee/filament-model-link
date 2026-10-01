@@ -315,6 +315,24 @@ suppression is unconditional either way, so one label can serve as a selectable
 option and as a navigable chip. Keep the flag off for options of a form select,
 where clicking a chip should not leave the form.
 
+### B3) Other labels in one list
+
+`HasPillLabel` names a model the same everywhere. A list whose readers know the
+records by another name — staff by a project's internal name, where customers
+see its public one — overrides it for that list alone:
+
+```php
+ModelLinkColumn::make('links')
+    ->relationships(['scene', 'project'])
+    ->labelUsing(fn (Model $model): ?string => $model instanceof Project ? $model->internal_name : null);
+```
+
+The callback labels every pill of the cell, ancestors in a chain included, and
+the overflow pill's list; null (or a blank string) keeps the model's own label.
+The column's search and sort text follows. `ModelLink` takes the same option,
+and the presenter's `renderPillChain()`, `renderPillChains()` and `textChain()`
+accept it as `labelUsing:`.
+
 ### C) Pill chain in plain Blade
 
 ```php

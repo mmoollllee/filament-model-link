@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Mmoollllee\FilamentModelLink\Forms\Components;
 
+use Closure;
 use Filament\Forms\Components\Placeholder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
 use Mmoollllee\FilamentModelLink\ModelReferencePresenter;
@@ -39,6 +41,9 @@ class ModelLink extends Placeholder
     protected ?array $relationships = null;
 
     protected ?int $maxPills = null;
+
+    /** @var (Closure(Model): ?string)|null */
+    protected ?Closure $labelUsing = null;
 
     /**
      * @param  iterable<int, string>  $viewTypes
@@ -76,6 +81,20 @@ class ModelLink extends Placeholder
         return $this;
     }
 
+    /**
+     * Label every pill — ancestors in a chain included — with something else
+     * than its `HasPillLabel` label; return null to keep that. Parity with
+     * `ModelLinkColumn::labelUsing()`.
+     *
+     * @param  (Closure(Model): ?string)|null  $callback
+     */
+    public function labelUsing(?Closure $callback): static
+    {
+        $this->labelUsing = $callback;
+
+        return $this;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -89,6 +108,7 @@ class ModelLink extends Placeholder
                 return $this->htmlOrNull(ModelReferencePresenter::renderPillChains(
                     $this->mergedRelated($record),
                     maxPills: $this->maxPills,
+                    labelUsing: $this->labelUsing,
                 ));
             }
 
@@ -100,6 +120,7 @@ class ModelLink extends Placeholder
                 return $this->htmlOrNull(ModelReferencePresenter::renderPillChains(
                     $related,
                     maxPills: $this->maxPills,
+                    labelUsing: $this->labelUsing,
                 ));
             }
 
@@ -107,7 +128,7 @@ class ModelLink extends Placeholder
                 return null;
             }
 
-            return new HtmlString(ModelReferencePresenter::renderPillChain($related, $this->buildUrl($record)));
+            return new HtmlString(ModelReferencePresenter::renderPillChain($related, $this->buildUrl($record), labelUsing: $this->labelUsing));
         });
     }
 

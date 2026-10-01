@@ -372,11 +372,11 @@ class ModelReferencePresenter
      * joins each model's `basePillLabel` with $separator. Suitable for
      * text-only contexts like filter indicators where HTML isn't allowed.
      */
-    public static function textChain(Model $related, string $separator = ' › '): string
+    public static function textChain(Model $related, string $separator = ' › ', ?Closure $labelUsing = null): string
     {
         return implode(
             $separator,
-            array_map(fn (Model $m): string => self::basePillLabel($m), self::pillChainModels($related)),
+            array_map(fn (Model $m): string => self::pillLabelFor($m, $labelUsing), self::pillChainModels($related)),
         );
     }
 
@@ -393,6 +393,10 @@ class ModelReferencePresenter
      *
      * $stopClickPropagation: see [self::wrapInBadge()] — set it when the chain
      * sits inside a clickable cell, never inside a select dropdown.
+     *
+     * $labelUsing overrides the label of any segment — see `pillLabelFor()`.
+     *
+     * @param  (Closure(Model): ?string)|null  $labelUsing
      */
     public static function renderPillChain(
         Model $related,
@@ -401,12 +405,13 @@ class ModelReferencePresenter
         ?int $ancestorLabelLimit = null,
         ?string $targetColor = null,
         bool $stopClickPropagation = false,
+        ?Closure $labelUsing = null,
     ): string {
         $ancestorLabelLimit ??= (int) (config('filament-model-link.ancestor_label_limit') ?? 20);
 
         $chain = self::pillChainModels($related);
         $lastIndex = count($chain) - 1;
-        $targetLabel = self::basePillLabel($chain[$lastIndex]);
+        $targetLabel = self::pillLabelFor($chain[$lastIndex], $labelUsing);
         if ($labelLimit !== null) {
             $targetLabel = Str::limit($targetLabel, $labelLimit);
         }
@@ -420,7 +425,7 @@ class ModelReferencePresenter
             $isTarget = $i === $lastIndex;
             $label = $isTarget
                 ? $targetLabel
-                : Str::limit(self::basePillLabel($model), $ancestorLabelLimit);
+                : Str::limit(self::pillLabelFor($model, $labelUsing), $ancestorLabelLimit);
 
             $segmentUrl = ($isTarget && $url !== null) ? $url : self::urlForRelated($model);
 
@@ -455,13 +460,18 @@ class ModelReferencePresenter
      * $stopClickPropagation: see [self::wrapInBadge()] — set it when the chains
      * sit inside a clickable cell, never inside a select dropdown.
      *
+     * $labelUsing overrides the label of any segment, the overflow pill's list
+     * included — see `pillLabelFor()`.
+     *
      * @param  iterable<int, mixed>  $models
+     * @param  (Closure(Model): ?string)|null  $labelUsing
      */
     public static function renderPillChains(
         iterable $models,
         ?int $labelLimit = null,
         ?int $maxPills = null,
         bool $stopClickPropagation = false,
+        ?Closure $labelUsing = null,
     ): string {
         $unique = [];
         foreach ($models as $model) {
@@ -509,12 +519,12 @@ class ModelReferencePresenter
         // Hook class only — see renderPillChain() on why no Tailwind here.
         $html = '<div class="fi-pill-chains">';
         foreach ($targets as $model) {
-            $html .= self::renderPillChain($model, labelLimit: $labelLimit, stopClickPropagation: $stopClickPropagation);
+            $html .= self::renderPillChain($model, labelLimit: $labelLimit, stopClickPropagation: $stopClickPropagation, labelUsing: $labelUsing);
         }
 
         if ($overflow !== []) {
             $hidden = implode(', ', array_map(
-                fn (Model $model): string => self::basePillLabel($model),
+                fn (Model $model): string => self::pillLabelFor($model, $labelUsing),
                 $overflow,
             ));
 
@@ -525,6 +535,29 @@ class ModelReferencePresenter
         }
 
         return $html.'</div>';
+    }
+
+    /**
+     * The label a pill shows for a model in one place: `$labelUsing` when it
+     * has an opinion — a non-blank string — else `basePillLabel()`.
+     *
+     * For a list whose readers know the records by another name than everyone
+     * else: staff by a project's internal name, say, where customers see its
+     * public one. `HasPillLabel` stays the default everywhere else.
+     *
+     * @param  (Closure(Model): ?string)|null  $labelUsing
+     */
+    public static function pillLabelFor(Model $model, ?Closure $labelUsing = null): string
+    {
+        if ($labelUsing !== null) {
+            $label = $labelUsing($model);
+
+            if (filled($label)) {
+                return (string) $label;
+            }
+        }
+
+        return self::basePillLabel($model);
     }
 
     /**
