@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  *     FilamentModelLink::configure()
  *         ->resolveIconUsing(fn (string $class) => …)
+ *         ->resolveStyleUsing(fn (Model $record) => …)
  *         ->resolveResourceParametersUsing(fn ($related, $panel) => …)
  *         ->registerCustomUrlResolver(fn ($related, $viewTypes, $source) => …);
  */
@@ -30,6 +31,20 @@ final class FilamentModelLink
     public function resolveIconUsing(Closure $resolver): self
     {
         ModelReferencePresenter::resolveIconUsing($resolver);
+
+        return $this;
+    }
+
+    /**
+     * Resolve color, icon and image per RECORD instead of per class — a
+     * customer with its favicon and brand color. Return null for a record that
+     * keeps its class-level look. See {@see PillStyle}.
+     *
+     * @param  Closure(Model $record): (PillStyle|null)  $resolver
+     */
+    public function resolveStyleUsing(Closure $resolver): self
+    {
+        ModelReferencePresenter::resolveStyleUsing($resolver);
 
         return $this;
     }

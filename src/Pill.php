@@ -30,6 +30,8 @@ final class Pill implements Htmlable
 
     protected string|BackedEnum|null $iconOverride = null;
 
+    protected ?string $image = null;
+
     protected string $iconTooltip = '';
 
     protected ?string $url = null;
@@ -103,6 +105,20 @@ final class Pill implements Htmlable
         return $this;
     }
 
+    /**
+     * Show an image — a favicon, a logo — in the icon slot. It beats `icon()`
+     * and the record's style image; the icon (or the type icon) is what shows
+     * when the image fails to load. Pass `null` to keep the default.
+     *
+     * Accepts a relative or http(s) URL, or a `data:image/…` URI.
+     */
+    public function image(?string $url): self
+    {
+        $this->image = $url;
+
+        return $this;
+    }
+
     public function iconTooltip(?string $tooltip): self
     {
         $this->iconTooltip = (string) $tooltip;
@@ -111,9 +127,11 @@ final class Pill implements Htmlable
     }
 
     /**
-     * Override the pill color (a Filament palette name such as `danger`).
-     * Beats the model's HasPills color — use it for per-record status colors.
-     * On a chain, only the target segment is recolored.
+     * Override the pill color: a Filament palette name such as `danger`, or a
+     * free color (`#0ea5e9`, `#0ae`, `rgb(14, 165, 233)`) for a brand color no
+     * palette knows. Beats the record's style and the model's HasPills color —
+     * use it for per-record status colors. On a chain, only the target segment
+     * is recolored.
      */
     public function color(?string $color): self
     {
@@ -184,13 +202,14 @@ final class Pill implements Htmlable
                 url: $this->url,
                 iconTooltip: $this->iconTooltip,
                 stopClickPropagation: $this->clickthrough,
+                image: $this->image,
             );
         }
 
         $url = $this->url
             ?? ($this->linked ? ModelReferencePresenter::urlForRelated($this->model) : null);
 
-        if ($this->iconOverride !== null || $this->iconTooltip !== '') {
+        if ($this->iconOverride !== null || $this->iconTooltip !== '' || filled($this->image)) {
             return ModelReferencePresenter::renderPillWithIconOverride(
                 model: $this->model,
                 icon: $this->iconOverride,
@@ -199,6 +218,7 @@ final class Pill implements Htmlable
                 url: $url,
                 color: $this->color,
                 stopClickPropagation: $this->clickthrough,
+                image: $this->image,
             );
         }
 

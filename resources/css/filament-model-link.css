@@ -164,6 +164,114 @@
     padding-inline-end: 0.5rem !important;
 }
 
+/* ── Multi-select: the remove control appears on hover ─────────────────────
+ *
+ * A chip that wraps a pill carries Filament's remove button (`.fi-badge-delete-btn`,
+ * the ×) permanently. Next to a pill that already shows an icon, a label and a
+ * link, a column of always-visible ×s is noise — it is shown when the chip is
+ * hovered or holds focus, so it is still there for the mouse and the keyboard.
+ *
+ * `opacity`, not `display`: the button keeps its box, so nothing shifts when it
+ * appears, and it stays focusable — Tab reaches it, `:focus-within` reveals it.
+ * It is invisible but clickable while the pointer is on the chip, which is
+ * exactly when it has just been revealed.
+ *
+ * Gated on `(hover: hover)`: a touch screen has no hover to reveal it with, and
+ * a control nobody can discover is worse than one that is always shown.
+ *
+ * Scoped by `:has()` to chips that wrap a pill (a chain contains `.fi-badge`
+ * segments too), so a plain Filament badge keeps its always-visible ×.
+ */
+@media (hover: hover) {
+    .fi-select-input-value-badges-ctn .fi-badge:has(> .fi-badge-label-ctn .fi-badge) > .fi-badge-delete-btn {
+        opacity: 0;
+        transition: opacity 100ms ease;
+    }
+
+    .fi-select-input-value-badges-ctn .fi-badge:has(> .fi-badge-label-ctn .fi-badge):hover > .fi-badge-delete-btn,
+    .fi-select-input-value-badges-ctn .fi-badge:has(> .fi-badge-label-ctn .fi-badge):focus-within > .fi-badge-delete-btn {
+        opacity: 1;
+    }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: reduce) {
+    .fi-select-input-value-badges-ctn .fi-badge:has(> .fi-badge-label-ctn .fi-badge) > .fi-badge-delete-btn {
+        transition: none;
+    }
+}
+
+/* ── Inline-edit cells: no frame until the pointer is on them ─────────────
+ *
+ * A table whose cells are all inputs reads as a form. A cell marked
+ * `.fi-pill-inline-edit` (`MultiSelectColumn` by default, `SelectColumn`
+ * through `->borderless()`) drops its input frame at rest and gets it back on
+ * hover or focus — the pills sit in the row like any other cell content.
+ *
+ * Only the frame is removed — Filament draws it as a ring (a `box-shadow`) on
+ * a white surface — and only while the cell is neither hovered nor focused.
+ * Everything else is Filament's own styling coming back: the hover frame, the
+ * primary focus ring, dark mode, the disabled surface. No colors are restated
+ * here, so a theme's palette stays in charge.
+ *
+ * `.fi-invalid` keeps its red ring at rest: a refused write has to stay
+ * visible. Gated on `(hover: hover)` — without a pointer there is no hover to
+ * reveal the frame with, and a touch user needs to see that the cell is an
+ * input.
+ */
+.fi-pill-inline-edit .fi-input-wrp {
+    transition:
+        background-color 150ms ease,
+        box-shadow 150ms ease;
+}
+
+@media (hover: hover) {
+    .fi-pill-inline-edit:not(:hover) .fi-input-wrp:not(:focus-within):not(.fi-invalid) {
+        background-color: transparent;
+        box-shadow: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fi-pill-inline-edit .fi-input-wrp {
+        transition: none;
+    }
+}
+
+/* ── Image icons (favicons) ────────────────────────────────────────────────
+ *
+ * An image takes the icon's place and size — `size-4`, what `IconSize::Small`
+ * gives a pill's icon — so a pill with a favicon is exactly as tall as one with
+ * an icon (the measurements above hold for both). `contain`, because favicons
+ * are not square by decree.
+ *
+ * `.fi-pill-image-fallback` holds the type icon behind the image. It starts
+ * `hidden`; if the image fails to load, Alpine hides the image and shows it.
+ * `.fi-pill-image-slot` carries the Alpine state for both (see
+ * `renderImage()` on why it is state and not a toggled attribute).
+ * `display: contents` keeps the slot and the fallback from becoming boxes of
+ * their own, and the `[hidden]` rules say `!important` because those author
+ * `display` values would otherwise beat the user-agent's `[hidden]` — in a
+ * theme without Tailwind's Preflight nothing else would hide them.
+ */
+.fi-pill-image {
+    display: block;
+    flex: none;
+    width: calc(var(--spacing, 0.25rem) * 4);
+    height: calc(var(--spacing, 0.25rem) * 4);
+    object-fit: contain;
+    border-radius: var(--radius-xs, 0.125rem);
+}
+
+.fi-pill-image-slot,
+.fi-pill-image-fallback {
+    display: contents;
+}
+
+.fi-pill-image[hidden],
+.fi-pill-image-fallback[hidden] {
+    display: none !important;
+}
+
 /* ── Linked pills: button-like hover ───────────────────────────────────────
  *
  * `.fi-pill-link` is set by the presenter on pills that actually carry an

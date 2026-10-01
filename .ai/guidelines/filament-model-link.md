@@ -127,10 +127,75 @@ Select::make('author_id')->pillOptions($authors, linked: false);
 // A pill flavor the presenter cannot infer (per-record icon, project wrapper):
 Select::make('author_id')->pillOptions($authors, renderUsing: fn (Author $a) => Pill::for($a)
     ->icon($a->role?->icon)->label($a->name)->linked()->clickthrough()->toHtml());
+
+// A search the macro cannot do from memory — look the records up yourself:
+Select::make('customer_ids')->multiple()->pillOptions(
+    fn () => Customer::latest()->limit(50)->get(),
+    searchUsing: fn (string $search) => Customer::where('name', 'like', "%{$search}%")->limit(50)->get(),
+);
+
+// Force Filament's searchable flag (omitted: multiple = searchable, single = not).
+Select::make('author_id')->pillOptions($authors, searchable: true);
 ```
 
 Prefer the macro over wiring a select by hand: it sets BOTH label sources from
-one renderer, so the dropdown option and the selected chip cannot drift apart.
+one renderer, so the dropdown option and the selected chip cannot drift apart —
+and it searches the **visible text** on the server. (Filament filters a
+client-side options list by the option's HTML, so a search for `href` or `a`
+would otherwise keep every pill.) On a `->multiple()` select it also adds
+keyboard removal: Backspace in an empty search box removes the last pill,
+Backspace / Delete on a focused pill removes that pill.
+
+### Editable select cell (`SelectColumn::pillOptions()`)
+
+```php
+// One assignment, edited in the cell. Same parameters as Select::pillOptions().
+SelectColumn::make('customer_id')
+    ->pillOptions(fn () => Customer::orderBy('name')->get(), searchable: true);
+```
+
+To-one only — Filament's `SelectColumn` has no multiple mode. Several
+assignments go into a `MultiSelectColumn`:
+
+```php
+// A BelongsToMany relation of the row: state, eager loading, sync() and the
+// allow-list come with pillOptions(). Options load when the dropdown opens.
+MultiSelectColumn::make('assignees')
+    ->pillOptions(fn () => User::query()->assignable()->get())
+    ->disabled(fn (Task $record): bool => ! auth()->user()->can('update', $record));
+```
+
+The cell has no input frame until hover or focus (`->borderless(false)` keeps
+it); give a plain `SelectColumn` the same look with `->borderless()`.
+
+Inline columns bypass model policies (only `disabled()` is checked), and the
+lazy option endpoint checks nothing — scope the options query. With
+`searchUsing:` pass `allowedValuesUsing()` too, or picks found only by searching
+are refused. A non-relation column (JSON array) is written as an attribute;
+anything else is wired by hand: `getStateUsing()`, `updateStateUsing()`,
+`selectedOptionLabelsUsing()`, `allowedValuesUsing()`.
+
+### Per-record look (`PillStyle`)
+
+```php
+// Color, icon and image per RECORD; null keeps the class-level look.
+FilamentModelLink::configure()->resolveStyleUsing(
+    fn (Model $record): ?PillStyle => $record instanceof Customer
+        ? PillStyle::make(color: $record->primary_color, image: $record->favicon_url)
+        : null,
+);
+
+// One-off, through the builder:
+Pill::for($customer)->color('#0ea5e9')->image($customer->favicon_url);
+```
+
+Fields fall back one by one (color → `HasPills::color()`, icon → icon resolver);
+an explicit builder call wins. `color` is a palette name or `#rgb` / `#rrggbb` /
+`rgb(r, g, b)` — a free color carries its shades inline, contrast-checked. An
+image takes relative, http(s) and `data:image/…` sources, carries
+`referrerpolicy="no-referrer"`, and falls back to the type icon if it fails to
+load. The closure runs once per rendered pill: eager-load what it reads, and
+store the favicon when the record is saved rather than fetching it on render.
 
 ### Static API (for plain text, filters, advanced cases)
 
@@ -247,6 +312,23 @@ explicit `viewTypes(['view'])` to force read-only links.
   the cap.
 - **Models without `HasPills`** fall back to class basename + the configured
   `default_color`. Implement `HasPills` to get a proper label and color.
+- **A pill select's search must run on the visible text.** select.js filters a
+  client-side options list by `option.label.includes(query)`; with `allowHtml()`
+  that label is the pill's markup, so `href` or `a` keeps every option — and a
+  `->multiple()` select is searchable by default. `pillOptions()` searches on
+  the server. With the static API, add a `getSearchResultsUsing()` that filters
+  on the plain label.
+- **A per-record look is not `HasPills::color()`.** That is static, per class.
+  Use `resolveStyleUsing()` / `PillStyle`; never register a Filament palette per
+  record color — the page head is rendered before the record exists and a
+  Livewire response never re-renders it. A free color (`#0ea5e9`) carries its
+  shades inline instead.
+- **Favicons: `->image()`, stored.** `->icon('/path.png')` renders an `<img>`
+  through Filament but has no failure fallback, referrer policy or URL check.
+  Store the favicon (file or `data:image/…` URI) when the record is saved; do not
+  fetch it while rendering.
+- **`SelectColumn::pillOptions()` is to-one.** Filament's `SelectColumn` holds one
+  value. A to-many cell is a `MultiSelectColumn` — guarded with `disabled()`.
 - **`->tooltip()` receives the resolved string state, not the model.** Use
   `->relatedTooltip(fn (?Author $author) => $author?->…)` when the tooltip needs
   the related model.

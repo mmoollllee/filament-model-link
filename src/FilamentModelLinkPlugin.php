@@ -91,6 +91,16 @@ class FilamentModelLinkPlugin implements Plugin
     }
 
     /**
+     * @param  Closure(Model $record): (PillStyle|null)  $resolver
+     */
+    public function resolveStyleUsing(Closure $resolver): static
+    {
+        $this->deferredCalls[] = fn () => ModelReferencePresenter::resolveStyleUsing($resolver);
+
+        return $this;
+    }
+
+    /**
      * @param  Closure(Model $related): array{0: mixed, 1: ?string}  $resolver
      */
     public function resolveResourceUsing(Closure $resolver): static

@@ -7,6 +7,7 @@ namespace Mmoollllee\FilamentModelLink;
 use BackedEnum;
 use Closure;
 use Filament\Facades\Filament;
+use Filament\Support\Colors\Color;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
@@ -20,6 +21,7 @@ use Mmoollllee\FilamentModelLink\Contracts\HasPillLabel;
 use Mmoollllee\FilamentModelLink\Contracts\HasPillParent;
 use Mmoollllee\FilamentModelLink\Contracts\HasPills;
 use Throwable;
+use UnexpectedValueException;
 
 use function Filament\Support\generate_icon_html;
 
@@ -36,6 +38,9 @@ class ModelReferencePresenter
 {
     /** @var Closure(string): (string|BackedEnum|null)|null */
     protected static ?Closure $iconResolver = null;
+
+    /** @var (Closure(Model): mixed)|null Declared `mixed` because a misbehaving resolver is checked at runtime. */
+    protected static ?Closure $styleResolver = null;
 
     /** @var Closure(Model): array{0: ?string, 1: ?string}|null Returns [resourceClass, panelId]. */
     protected static ?Closure $resourceResolver = null;
@@ -60,6 +65,28 @@ class ModelReferencePresenter
     public static function resolveIconUsing(?Closure $resolver): void
     {
         self::$iconResolver = $resolver;
+    }
+
+    /**
+     * Provide the look of a single RECORD — where the class-level color
+     * (`HasPills::color()`) and icon (the icon resolver) are not enough, e.g. a
+     * customer shown with its own favicon and brand color.
+     *
+     * The closure receives the model and returns a {@see PillStyle}, or null to
+     * keep the class-level look. Fields the style leaves empty fall back too,
+     * and an explicit `Pill::color()` / `icon()` / `image()` still wins:
+     *
+     *     ModelReferencePresenter::resolveStyleUsing(fn (Model $record): ?PillStyle =>
+     *         $record instanceof Customer
+     *             ? PillStyle::make(color: $record->primary_color, image: $record->favicon_url)
+     *             : null
+     *     );
+     *
+     * @param  (Closure(Model): (PillStyle|null))|null  $resolver
+     */
+    public static function resolveStyleUsing(?Closure $resolver): void
+    {
+        self::$styleResolver = $resolver;
     }
 
     /**
@@ -100,10 +127,12 @@ class ModelReferencePresenter
     public static function flush(): void
     {
         self::$iconResolver = null;
+        self::$styleResolver = null;
         self::$resourceResolver = null;
         self::$resourceParametersResolver = null;
         self::$customUrlResolvers = [];
         self::$iconCache = [];
+        self::$colorStyleCache = [];
         self::$resourceCache = [];
     }
 
@@ -223,6 +252,9 @@ class ModelReferencePresenter
      * Render a raw pill with no model behind it — for value pills like dates,
      * counters, or statuses that should look exactly like model pills.
      * Color falls back to the configured default; icon and link are optional.
+     *
+     * $color is a Filament palette name or a free color (`#0ea5e9`). $image is
+     * the URL of an image shown in the icon slot; $icon is its fallback.
      */
     public static function renderPill(
         string $label,
@@ -231,10 +263,17 @@ class ModelReferencePresenter
         ?string $url = null,
         string $iconTooltip = '',
         bool $stopClickPropagation = false,
+        ?string $image = null,
     ): string {
-        $classes = self::badgeClasses(filled($color) ? $color : self::defaultColor());
+        $color = filled($color) ? $color : self::defaultColor();
 
-        return self::wrapInBadge($classes, self::iconSpan(self::renderIcon($icon), $iconTooltip).e($label), $url, $stopClickPropagation);
+        return self::wrapInBadge(
+            self::badgeClasses($color),
+            self::iconSpan(self::iconSlot($image, self::renderIcon($icon)), $iconTooltip).e($label),
+            $url,
+            $stopClickPropagation,
+            self::badgeStyle($color),
+        );
     }
 
     /**
@@ -243,16 +282,24 @@ class ModelReferencePresenter
      *
      * Use this when the caller provides no surrounding badge of its own
      * (tables, form display components, free HTML, single-select dropdowns).
-     * $color overrides the model's HasPills color — e.g. a per-record status.
+     * $color overrides the model's color — e.g. a per-record status. Without
+     * it the record's {@see PillStyle} applies, then `HasPills::color()`.
      *
      * $stopClickPropagation: see [self::wrapInBadge()] — set it when the pill
      * sits inside a clickable cell, never inside a select dropdown.
      */
     public static function renderStandalonePill(mixed $model, string $label, ?string $url = null, ?string $color = null, bool $stopClickPropagation = false): string
     {
-        $classes = self::badgeClasses(filled($color) ? $color : self::pillColor($model));
+        $style = self::styleFor($model);
+        $color = self::resolveColor($model, $color, $style);
 
-        return self::wrapInBadge($classes, self::iconHtml($model).e($label), $url, $stopClickPropagation);
+        return self::wrapInBadge(
+            self::badgeClasses($color),
+            self::iconHtml($model, $style).e($label),
+            $url,
+            $stopClickPropagation,
+            self::badgeStyle($color),
+        );
     }
 
     /**
@@ -260,6 +307,9 @@ class ModelReferencePresenter
      * tooltip) replaces the model's default icon. Useful for models whose
      * representative icon varies per record — e.g. a User shown with their
      * role's icon instead of the generic user icon.
+     *
+     * $image shows an image (a favicon) in the icon slot instead; it beats
+     * $icon, which then serves as its fallback.
      */
     public static function renderPillWithIconOverride(
         Model $model,
@@ -270,14 +320,20 @@ class ModelReferencePresenter
         ?string $url = null,
         ?string $color = null,
         bool $stopClickPropagation = false,
+        ?string $image = null,
     ): string {
-        $classes = self::badgeClasses(filled($color) ? $color : self::pillColor($model));
+        $style = self::styleFor($model);
+        $color = self::resolveColor($model, $color, $style);
 
-        // A caller-supplied icon replaces the model's default; when none is
-        // given, fall back to the default icon but keep the tooltip on it.
-        $iconInner = ($icon === null || $icon === '')
-            ? self::iconHtml($model)
-            : self::renderIcon($icon);
+        // A caller-supplied icon or image replaces the model's default; when
+        // neither is given, fall back to the default icon but keep the tooltip
+        // on it.
+        $hasIcon = $icon !== null && $icon !== '';
+        $iconInner = match (true) {
+            filled($image) => self::iconSlot($image, $hasIcon ? self::renderIcon($icon) : self::typeIconHtml($model, $style)),
+            $hasIcon => self::renderIcon($icon),
+            default => self::iconHtml($model, $style),
+        };
 
         // No extra flex wrapper around icon + label: `.fi-badge` is already an
         // inline-flex row with its own gap, exactly like renderStandalonePill().
@@ -286,7 +342,7 @@ class ModelReferencePresenter
         // An explicit $url (e.g. from Pill::url()) wins; otherwise resolve when linked.
         $url ??= $linked ? self::urlForRelated($model) : null;
 
-        return self::wrapInBadge($classes, $inner, $url, $stopClickPropagation);
+        return self::wrapInBadge(self::badgeClasses($color), $inner, $url, $stopClickPropagation, self::badgeStyle($color));
     }
 
     /**
@@ -462,7 +518,10 @@ class ModelReferencePresenter
                 $overflow,
             ));
 
-            $html .= '<span class="'.self::badgeClasses(self::defaultColor()).'" title="'.e($hidden).'">+'.count($overflow).'</span>';
+            $overflowColor = self::defaultColor();
+            $overflowStyle = self::badgeStyle($overflowColor);
+
+            $html .= '<span class="'.self::badgeClasses($overflowColor).'"'.($overflowStyle !== '' ? ' style="'.$overflowStyle.'"' : '').' title="'.e($hidden).'">+'.count($overflow).'</span>';
         }
 
         return $html.'</div>';
@@ -571,6 +630,18 @@ class ModelReferencePresenter
     }
 
     /**
+     * The plain-text label a select shows for a model — see `selectLabelFor()`.
+     * Public so a select can search the same text it displays.
+     */
+    public static function selectLabel(
+        Model $model,
+        ?string $labelAttribute = null,
+        ?callable $labelCallback = null,
+    ): string {
+        return self::selectLabelFor($model, $labelAttribute, $labelCallback);
+    }
+
+    /**
      * Shared label resolution for both select helpers: an explicit callback
      * wins, then an explicit attribute, then `basePillLabel()` — which honors
      * `HasPillLabel` and falls back to name/title, so a select label never
@@ -606,7 +677,7 @@ class ModelReferencePresenter
 
         $iconHtml = $case instanceof HasIcon ? self::renderIcon($case->getIcon()) : '';
 
-        return self::wrapInBadge(self::badgeClasses($color), $iconHtml.e($label), null);
+        return self::wrapInBadge(self::badgeClasses($color), $iconHtml.e($label), null, style: self::badgeStyle($color));
     }
 
     /**
@@ -652,6 +723,44 @@ class ModelReferencePresenter
         }
 
         return self::defaultColor();
+    }
+
+    /**
+     * The record's own look, if a style resolver is registered and has an
+     * opinion about it. Only models can carry one; a class-string or a raw
+     * pill has no record to ask about.
+     */
+    protected static function styleFor(mixed $model): ?PillStyle
+    {
+        if (self::$styleResolver === null || ! $model instanceof Model) {
+            return null;
+        }
+
+        $style = (self::$styleResolver)($model);
+
+        if ($style !== null && ! $style instanceof PillStyle) {
+            throw new UnexpectedValueException(sprintf(
+                'The style resolver must return a %s or null, %s returned for %s.',
+                PillStyle::class,
+                get_debug_type($style),
+                $model::class,
+            ));
+        }
+
+        return $style;
+    }
+
+    /**
+     * Color precedence: an explicit argument, then the record's style, then the
+     * class-level `HasPills::color()`, then the configured default.
+     */
+    protected static function resolveColor(mixed $model, ?string $explicit, ?PillStyle $style): string
+    {
+        return match (true) {
+            filled($explicit) => $explicit,
+            filled($style?->color) => $style->color,
+            default => self::pillColor($model),
+        };
     }
 
     protected static function defaultColor(): string
@@ -809,6 +918,15 @@ class ModelReferencePresenter
 
     protected static function badgeClasses(string $color): string
     {
+        $color = self::usableColor($color);
+
+        // A free color has no palette to resolve: Filament's own badge takes the
+        // shades from inline custom properties (see `badgeStyle()`) and a
+        // `fi-color` marker, with no `fi-color-X` class — `X` would be a hex.
+        if (self::isFreeColor($color)) {
+            return e('fi-badge fi-size-sm fi-color fi-color-custom');
+        }
+
         try {
             $resolved = FilamentColor::getComponentClasses(BadgeComponent::class, $color);
         } catch (Throwable) {
@@ -824,6 +942,158 @@ class ModelReferencePresenter
     }
 
     /**
+     * The inline `style` for a free color, '' for a palette name.
+     *
+     * A palette name works through classes because Filament emits the palette's
+     * shades into the page head. A color that only exists on one record is not
+     * in that head, and one registered while a Livewire response renders would
+     * never reach the page — so its shades travel with the pill. They come from
+     * Filament's own badge pipeline: the palette is generated from the color and
+     * the `--text` shades are picked by WCAG contrast against the surface, so a
+     * pale brand color gets dark text and a dark one gets light text, exactly as
+     * for a palette badge.
+     *
+     * Already attribute-escaped.
+     */
+    protected static function badgeStyle(string $color): string
+    {
+        $color = self::usableColor($color);
+
+        if (! self::isFreeColor($color)) {
+            return '';
+        }
+
+        $color = self::normalizeFreeColor($color);
+
+        if (isset(self::$colorStyleCache[$color])) {
+            return self::$colorStyleCache[$color];
+        }
+
+        try {
+            $declarations = FilamentColor::getComponentCustomStyles(BadgeComponent::class, Color::generatePalette($color));
+        } catch (Throwable) {
+            // Not a color Filament can convert — render as the default color
+            // rather than breaking the whole table over one bad value.
+            return '';
+        }
+
+        return self::$colorStyleCache[$color] = e(implode('; ', $declarations).';');
+    }
+
+    /**
+     * A color the pill can actually render: a free color, or a name that is
+     * safe to become part of a `fi-color-X` class. Anything else — a record's
+     * "not set", a stray `#12` — falls back to the default color instead of
+     * leaking junk class tokens into the markup.
+     */
+    protected static function usableColor(string $color): string
+    {
+        $color = trim($color);
+
+        return (self::isFreeColor($color) || preg_match('/^[a-z][a-z0-9_-]*$/i', $color) === 1)
+            ? $color
+            : self::defaultColor();
+    }
+
+    /**
+     * `#rgb`, `#rrggbb` and `rgb(r, g, b)` are free colors; anything else is
+     * taken for a palette name. Deliberately narrow — these are the forms
+     * Filament's converter parses.
+     */
+    protected static function isFreeColor(string $color): bool
+    {
+        return preg_match('/^(#([0-9a-f]{3}|[0-9a-f]{6})|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/i', trim($color)) === 1;
+    }
+
+    /**
+     * Filament's converter reads `#rrggbb` and `rgb(r,g,b)`, not the `#rgb`
+     * shorthand — normalize every free color to `#rrggbb`, which also gives
+     * the style cache one key per color however it was spelled.
+     */
+    protected static function normalizeFreeColor(string $color): string
+    {
+        $color = strtolower(trim($color));
+
+        if (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/', $color, $m) === 1) {
+            return '#'.$m[1].$m[1].$m[2].$m[2].$m[3].$m[3];
+        }
+
+        if (preg_match('/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/', $color, $m) === 1) {
+            return sprintf('#%02x%02x%02x', min(255, (int) $m[1]), min(255, (int) $m[2]), min(255, (int) $m[3]));
+        }
+
+        return $color;
+    }
+
+    /**
+     * The icon slot's content: an image (a favicon) with $fallbackHtml behind
+     * it, or just $fallbackHtml when there is no usable image.
+     */
+    protected static function iconSlot(?string $image, string $fallbackHtml): string
+    {
+        $img = self::renderImage($image, $fallbackHtml);
+
+        return $img !== '' ? $img : $fallbackHtml;
+    }
+
+    /**
+     * An `<img>` for the icon slot, or '' for a missing or unsafe source.
+     *
+     * Three decisions worth knowing about:
+     *
+     * - The fallback. When the image fails to load, the type icon rendered
+     *   right behind it takes over. Inside a Filament panel — every table, form
+     *   and select — Alpine drives that; in free HTML there is no Alpine and the
+     *   broken image simply stays (empty `alt`, fixed box).
+     * - The failure lives in Alpine STATE, not in a toggled attribute. Livewire
+     *   morphs a re-rendered table back to the server's markup, which knows
+     *   nothing of a failed load: a `hidden` set by an error handler is undone,
+     *   and the image does not fail a second time to set it again. Alpine's
+     *   morph keeps component state and re-applies its bindings, so the
+     *   fallback survives every round trip. `x-on:load` clears the state when a
+     *   morph hands the slot a different image (a re-sorted row); `decode()`
+     *   catches an image that failed before Alpine had initialised.
+     * - `referrerpolicy="no-referrer"`: a favicon usually lives on somebody
+     *   else's host, which has no business learning which admin URL embedded it.
+     */
+    protected static function renderImage(?string $image, string $fallbackHtml = ''): string
+    {
+        $src = self::safeImageSrc($image);
+
+        if ($src === null) {
+            return '';
+        }
+
+        return '<span class="fi-pill-image-slot" x-data="{ failed: false }">'
+            .'<img class="fi-pill-image" src="'.e($src).'" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"'
+            .' x-bind:hidden="failed"'
+            .' x-init="$el.decode().catch(() => failed = true)"'
+            .' x-on:error="failed = true"'
+            .' x-on:load="failed = false">'
+            .($fallbackHtml !== '' ? '<span class="fi-pill-image-fallback" hidden x-bind:hidden="! failed">'.$fallbackHtml.'</span>' : '')
+            .'</span>';
+    }
+
+    /**
+     * Same rule as `safeHref()` — relative or http(s) — plus `data:image/…`,
+     * which an `<img>` can never execute and which lets a favicon that was
+     * cached locally travel inline. `data:image/svg+xml` is covered by that: an
+     * image element does not run scripts.
+     */
+    protected static function safeImageSrc(?string $image): ?string
+    {
+        if ($image === null || trim($image) === '') {
+            return null;
+        }
+
+        if (preg_match('#^\s*data:image/[a-z0-9.+-]+[;,]#i', $image) === 1) {
+            return trim($image);
+        }
+
+        return self::safeHref($image);
+    }
+
+    /**
      * Wrap pill inner-HTML in a badge `<span>`, or an `<a>` when a safe URL is
      * given. Centralizes the badge markup so the link/span shape stays in sync.
      *
@@ -833,10 +1103,13 @@ class ModelReferencePresenter
      * cancel the anchor's navigation. It is opt-in because in a Filament
      * select the click MUST reach the dropdown's own handler — stopping it
      * there would navigate away instead of picking the option.
+     *
+     * $style is a free color's already-escaped inline style (`badgeStyle()`).
      */
-    protected static function wrapInBadge(string $classes, string $inner, ?string $url, bool $stopClickPropagation = false): string
+    protected static function wrapInBadge(string $classes, string $inner, ?string $url, bool $stopClickPropagation = false, string $style = ''): string
     {
         $href = self::safeHref($url);
+        $styleAttribute = $style !== '' ? ' style="'.$style.'"' : '';
 
         if ($href !== null) {
             // `fi-pill-link` marks a pill whose href is real, so the stylesheet
@@ -851,10 +1124,10 @@ class ModelReferencePresenter
             $stop = $stopClickPropagation ? ' x-on:click.stop' : '';
             $clickthrough = $stopClickPropagation ? ' fi-pill-clickthrough' : '';
 
-            return '<a href="'.e($href).'"'.$stop.' class="'.$classes.' fi-pill-link'.$clickthrough.'">'.$inner.'</a>';
+            return '<a href="'.e($href).'"'.$stop.' class="'.$classes.' fi-pill-link'.$clickthrough.'"'.$styleAttribute.'>'.$inner.'</a>';
         }
 
-        return '<span class="'.$classes.'">'.$inner.'</span>';
+        return '<span class="'.$classes.'"'.$styleAttribute.'>'.$inner.'</span>';
     }
 
     /**
@@ -879,10 +1152,22 @@ class ModelReferencePresenter
         return preg_match('#^https?:#i', $trimmed) === 1 ? $url : null;
     }
 
-    protected static function iconHtml(mixed $model): string
+    /**
+     * The icon slot for a model: its style's image (the type icon behind it as
+     * fallback), else its style's icon, else the class-level icon.
+     */
+    protected static function iconHtml(mixed $model, ?PillStyle $style = null): string
     {
-        // renderIcon() already returns '' for blank icons and swallows failures.
-        return self::renderIcon(self::resolveIconFor($model));
+        return self::iconSlot($style?->image, self::typeIconHtml($model, $style));
+    }
+
+    /**
+     * The type icon alone, no image — what an image falls back to.
+     * renderIcon() already returns '' for blank icons and swallows failures.
+     */
+    protected static function typeIconHtml(mixed $model, ?PillStyle $style = null): string
+    {
+        return self::renderIcon(filled($style?->icon) ? $style->icon : self::resolveIconFor($model));
     }
 
     protected static function resolveIconFor(mixed $model): string|BackedEnum|null
@@ -925,4 +1210,7 @@ class ModelReferencePresenter
 
     /** @var array<string, string> */
     protected static array $iconCache = [];
+
+    /** @var array<string, string> */
+    protected static array $colorStyleCache = [];
 }

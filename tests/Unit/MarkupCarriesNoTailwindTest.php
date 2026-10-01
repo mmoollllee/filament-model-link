@@ -29,6 +29,11 @@ function pillMarkupSamples(): array
         'raw with icon' => ModelReferencePresenter::renderPill('Roh', icon: 'heroicon-o-user', iconTooltip: 'Rolle'),
         'clickthrough' => ModelReferencePresenter::renderStandalonePill($parent, 'Parent', '/x', stopClickPropagation: true),
         'icon override' => ModelReferencePresenter::renderPillWithIconOverride($parent, 'heroicon-o-user', 'Parent', 'Rolle'),
+        // An image with a rendered type icon behind it — both new hooks at once.
+        'image with fallback' => ModelReferencePresenter::renderPillWithIconOverride($parent, '/icons/type.svg', 'Parent', image: 'https://example.test/favicon.ico'),
+        'image' => ModelReferencePresenter::renderPill('Acme', image: 'https://example.test/favicon.ico'),
+        // A free color adds an inline style and a marker class, nothing else.
+        'free color' => ModelReferencePresenter::renderPill('Acme', '#0ea5e9', url: '/x'),
     ];
 }
 
@@ -53,7 +58,7 @@ it('keeps every class the stylesheet targets present in the markup', function ()
 
     // Hooks the stylesheet owns and this package emits itself. Filament's own
     // classes (fi-badge, fi-dropdown-list-item, …) are deliberately not listed.
-    foreach (['fi-pill-chain', 'fi-pill-chains', 'fi-pill-link', 'fi-pill-clickthrough'] as $hook) {
+    foreach (['fi-pill-chain', 'fi-pill-chains', 'fi-pill-link', 'fi-pill-clickthrough', 'fi-pill-image', 'fi-pill-image-slot', 'fi-pill-image-fallback'] as $hook) {
         expect($css)->toContain(".{$hook}")
             ->and($markup)->toContain($hook);
     }
@@ -74,4 +79,60 @@ it('keeps the vertical-alignment rules for pills used as select values', functio
         '.fi-badge-label:has(> .fi-pill-chain)'] as $selector) {
         expect($css)->toContain($selector);
     }
+});
+
+/**
+ * A hidden control is only acceptable where something else reveals it. On a
+ * touch screen nothing does, so the rule must be gated on a real hover — and it
+ * must not take the control out of the tab order, or the keyboard cannot reach
+ * what only the mouse could discover.
+ */
+it('reveals the remove control of a pill chip on hover and focus, never on touch', function (): void {
+    $css = file_get_contents(__DIR__.'/../../resources/css/filament-model-link.css');
+
+    $chip = '.fi-select-input-value-badges-ctn .fi-badge:has(> .fi-badge-label-ctn .fi-badge)';
+
+    expect($css)
+        ->toContain('@media (hover: hover) {')
+        ->toContain("{$chip} > .fi-badge-delete-btn {\n        opacity: 0;")
+        ->toContain("{$chip}:hover > .fi-badge-delete-btn")
+        ->toContain("{$chip}:focus-within > .fi-badge-delete-btn");
+
+    // Hidden by opacity, which keeps the button in the layout and the tab order.
+    $hide = substr($css, (int) strpos($css, '@media (hover: hover) {'), 600);
+    expect($hide)->not->toContain('display: none')->not->toContain('visibility: hidden');
+});
+
+it('keeps an image icon to the size of an icon and hides what is hidden', function (): void {
+    $css = file_get_contents(__DIR__.'/../../resources/css/filament-model-link.css');
+
+    expect($css)
+        ->toContain('.fi-pill-image {')
+        ->toContain('.fi-pill-image-fallback {')
+        // The author `display` values above would beat the user-agent's [hidden].
+        ->toContain(".fi-pill-image-slot,\n.fi-pill-image-fallback {\n    display: contents;")
+        ->toContain(".fi-pill-image[hidden],\n.fi-pill-image-fallback[hidden] {\n    display: none !important;");
+});
+
+/**
+ * A frameless input is only acceptable where something reveals the frame —
+ * hover, focus — and never where it hides an error. On touch nothing hovers,
+ * so the frame must stay.
+ */
+it('drops the inline-edit frame only at rest, never on an error, never on touch', function (): void {
+    $css = file_get_contents(__DIR__.'/../../resources/css/filament-model-link.css');
+
+    $rule = '.fi-pill-inline-edit:not(:hover) .fi-input-wrp:not(:focus-within):not(.fi-invalid) {';
+    $media = substr($css, (int) strrpos(substr($css, 0, (int) strpos($css, $rule)), '@media'), 40);
+
+    expect($css)->toContain($rule)
+        ->and($media)->toStartWith('@media (hover: hover) {');
+
+    // Only the frame goes: no restated colors that would fight a theme.
+    $start = (int) strpos($css, $rule);
+    $block = substr($css, $start, (int) strpos($css, '}', $start) - $start);
+    expect($block)->toContain('box-shadow: none;')
+        ->toContain('background-color: transparent;')
+        ->not->toContain('rgb(')
+        ->not->toContain('--primary');
 });
