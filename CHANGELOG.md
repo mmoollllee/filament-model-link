@@ -5,6 +5,17 @@ All notable changes to `mmoollllee/filament-model-link` will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] — 2026-10-26
+
+### Fixed
+
+- **Click-through pills stay links in a multiple select on Filament 5.10.**
+  Filament 5.10 drops the pointer events of a multiple select's whole value
+  container — the select's button lies behind it — and the selected badges
+  inherited that, so a pill marked `fi-pill-clickthrough` no longer navigated.
+  The stylesheet hands it its pointer events back; its `x-on:click.stop` still
+  keeps the select from opening. Older Filament versions are unaffected.
+
 ## [0.5.1] — 2026-10-01
 
 ### Added

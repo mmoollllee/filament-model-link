@@ -375,6 +375,16 @@
     text-decoration: none !important;
 }
 
+/*
+ * Since Filament 5.10 a multiple select drops the pointer events of its whole
+ * value container — the select's button lies behind it — and the badges
+ * inherit that. A click-through pill takes them back; its `x-on:click.stop`
+ * keeps the select from opening.
+ */
+.fi-select-input-value-ctn a.fi-pill-clickthrough {
+    pointer-events: auto;
+}
+
 .fi-dropdown-list-item .fi-pill-link:hover,
 .fi-dropdown-list-item .fi-pill-link:active,
 .fi-dropdown-list-item .fi-pill-link:focus-visible,

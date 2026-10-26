@@ -266,10 +266,11 @@ class MultiSelectColumn extends SelectColumn
      * relation `sync()`s it; anything else falls through to Filament's
      * attribute write (a JSON array column, say).
      *
-     * The write path returns `null` for every refusal (hidden, disabled,
-     * unknown record), and an `updateStateUsing()` closure may legitimately
-     * return `null` too — the browser could not tell the two apart. Always
-     * answer with the stored state so `null` means "not saved".
+     * Filament answers a refusal (hidden, disabled, unknown record) with
+     * `null` — since 5.10 with `['error' => …]`, which the cell shows as it
+     * is —, and an `updateStateUsing()` closure may legitimately return
+     * `null` too: the browser could not tell the two apart. Always answer
+     * with the stored state so `null` means "not saved".
      */
     public function updateState(mixed $state): mixed
     {
